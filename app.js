@@ -1836,9 +1836,15 @@ square.addEventListener("click", event => {
 
 
     if (active) {
-
-      active.scrollIntoView({ block: "nearest" });
-
+      // Scroll only the move list. Element.scrollIntoView() may also scroll
+      // the whole page on mobile browsers, making the chessboard jump away.
+      const activeTop = active.offsetTop - list.offsetTop;
+      const activeBottom = activeTop + active.offsetHeight;
+      if (activeTop < list.scrollTop) {
+        list.scrollTop = activeTop;
+      } else if (activeBottom > list.scrollTop + list.clientHeight) {
+        list.scrollTop = activeBottom - list.clientHeight;
+      }
     }
 
   }

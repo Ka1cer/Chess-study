@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Chess Study — Personal Chess Database</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script>
+    if (typeof Chess === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"><\/script>');
+    }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">♞</span><span>Chess Study</span></div>
+    <div class="top-actions">
+      <button id="newGameBtn" class="btn ghost">New game</button>
+      <button id="importBtn" class="btn ghost">Import PGN</button>
+      <button id="exportBtn" class="btn primary">Export PGN</button>
+      <input id="fileInput" type="file" accept=".pgn,.txt" hidden>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="board-panel panel">
+      <div class="game-heading">
+        <div>
+          <div class="eyebrow">ANALYSIS BOARD</div>
+          <h1 id="gameTitle">Untitled game</h1>
+          <p id="gameMeta">White vs Black · Casual game</p>
+        </div>
+        <button id="flipBtn" class="icon-btn" title="Flip board" aria-label="Flip board">⇅</button>
+      </div>
+      <div class="player-row black-player"><span class="avatar">♚</span><span id="blackName">Black</span><span class="player-tag">BLACK</span></div>
+      <div id="board" class="board" aria-label="Chess board"></div>
+      <div class="player-row white-player"><span class="avatar">♔</span><span id="whiteName">White</span><span class="player-tag">WHITE</span></div>
+      <div class="board-controls">
+        <button id="firstBtn" class="control-btn" title="First move">|◀</button>
+        <button id="backBtn" class="control-btn" title="Previous move">‹</button>
+        <button id="forwardBtn" class="control-btn" title="Next move">›</button>
+        <button id="lastBtn" class="control-btn" title="Last move">▶|</button>
+        <span class="move-counter" id="moveCounter">Start position</span>
+      </div>
+      <div id="status" class="status">White to move</div>
+    </section>
+
+    <aside class="side-column">
+      <section class="panel moves-panel">
+        <div class="section-title"><h2>Moves</h2><span class="subtle">English notation · SAN</span></div>
+        <div id="moveList" class="move-list"><div class="empty">Moves will appear here.</div></div>
+      </section>
+
+      <section class="panel details-panel">
+        <div class="section-title"><h2>Game details</h2><span class="subtle">Edit metadata</span></div>
+        <label>White <input id="whiteInput" value="White" maxlength="80"></label>
+        <label>Black <input id="blackInput" value="Black" maxlength="80"></label>
+        <div class="two-fields">
+          <label>Event <input id="eventInput" value="Casual game" maxlength="100"></label>
+          <label>Date <input id="dateInput" type="date"></label>
+        </div>
+        <label>Opening / notes <textarea id="notesInput" rows="2" placeholder="Opening name, ideas, mistakes..."></textarea></label>
+        <button id="saveBtn" class="btn primary full">Save to my database</button>
+        <div class="small-note">Games are stored in this browser on this device (localStorage).</div>
+      </section>
+
+      <section class="panel database-panel">
+        <div class="section-title"><h2>My games</h2><span class="subtle" id="gameCount">0 saved</span></div>
+        <div class="db-tools">
+          <input id="searchInput" placeholder="Search players, event, notes…">
+          <button id="backupBtn" class="btn ghost compact">Backup</button>
+          <input id="backupInput" type="file" accept=".json" hidden>
+        </div>
+        <div id="savedGames" class="saved-games"><div class="empty">No saved games yet.</div></div>
+      </section>
+    </aside>
+  </main>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>

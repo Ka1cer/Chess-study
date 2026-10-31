@@ -77,6 +77,19 @@
 
   let variationNumber = 1;
 
+  // ---------- Stockfish game mode ----------
+  let engineWorker = null;
+  let evaluationWorker = null;
+  let evaluationRequestId = 0;
+  let engineMode = false;
+  let engineColor = "b"; // The computer plays Black by default.
+  let engineThinking = false;
+  let engineRequest = 0;
+  let engineAnalysisOnly = false;
+  let lastEvaluation = 0;
+  let ignoreNextBestmove = false;
+  let evaluationTurn = "w";
+
 
 
 
@@ -793,6 +806,7 @@
     legalTargets = [];
 
     renderAll();
+    requestPositionEvaluation();
 
   }
 
@@ -1184,7 +1198,276 @@ square.addEventListener("click", event => {
 
 
 
+  function renderEvaluation(score, mate = null) {
+    const valueEl = $("evaluationValue");
+    const whiteEl = $("evalWhite");
+    const blackEl = $("evalBlack");
+    if (mate !== null) {
+      const whiteMate = mate > 0;
+      if (valueEl) valueEl.textContent = `M${Math.abs(mate)}`;
+      const whiteShare = whiteMate ? 0.96 : 0.04;
+      if (whiteEl) whiteEl.style.height = `${whiteShare * 100}%`;
+      if (blackEl) blackEl.style.height = `${(1 - whiteShare) * 100}%`;
+      return;
+    }
+    const pawns = Math.max(-10, Math.min(10, score / 100));
+    lastEvaluation = pawns;
+    if (valueEl) valueEl.textContent = `${pawns > 0 ? "+" : ""}${pawns.toFixed(2)}`;
+    const whiteShare = 1 / (1 + Math.exp(-pawns * 0.55));
+    if (whiteEl) whiteEl.style.height = `${whiteShare * 100}%`;
+    if (blackEl) blackEl.style.height = `${(1 - whiteShare) * 100}%`;
+  }
+
+  function renderMaterial() {
+    const values = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+    let white = 0, black = 0;
+    game.board().flat().forEach(piece => {
+      if (!piece) return;
+      if (piece.color === "w") white += values[piece.type] || 0;
+      else black += values[piece.type] || 0;
+    });
+    const diff = white - black;
+    const whiteEl = $("whiteMaterial"), blackEl = $("blackMaterial");
+    if (whiteEl) whiteEl.textContent = diff > 0 ? `+${diff}` : "";
+    if (blackEl) blackEl.textContent = diff < 0 ? `+${Math.abs(diff)}` : "";
+  }
+
+  function updateEvaluationFromInfo(message) {
+    const scoreMatch = message.match(/\bscore\s+(cp|mate)\s+(-?\d+)/);
+    if (!scoreMatch) return;
+    const type = scoreMatch[1];
+    const raw = Number(scoreMatch[2]);
+    // UCI score is expressed from the side-to-move perspective.
+    const whitePerspective = evaluationTurn === "w" ? raw : -raw;
+    renderEvaluation(type === "mate" ? 0 : whitePerspective, type === "mate" ? whitePerspective : null);
+  }
+
+  function setEngineStatus(message) {
+    const element = $("engineStatus");
+    if (element) element.textContent = message;
+  }
+
+  function stopEngineSearch() {
+    engineRequest++;
+    if (engineWorker && (engineThinking || engineAnalysisOnly)) {
+      ignoreNextBestmove = true;
+      try { engineWorker.postMessage("stop"); } catch {}
+    }
+    engineThinking = false;
+    engineAnalysisOnly = false;
+  }
+
+  function closeEngine() {
+    stopEngineSearch();
+    engineAnalysisOnly = false;
+    ignoreNextBestmove = false;
+    if (engineWorker) {
+      try { engineWorker.terminate(); } catch {}
+      engineWorker = null;
+    }
+  }
+
+  function createEngine() {
+    if (engineWorker) return true;
+    ignoreNextBestmove = false;
+    try {
+      // This is the same single-threaded browser build tested locally.
+      engineWorker = new Worker("./stockfish-19-lite-single.js");
+      engineWorker.addEventListener("message", event => {
+        const message = String(event.data || "").trim();
+        if (!message) return;
+
+        if (message.startsWith("info ")) {
+          return; // Position evaluation is handled by the dedicated analysis worker.
+        }
+        if (message === "uciok") {
+          engineWorker.postMessage("isready");
+          return;
+        }
+        if (message === "readyok") {
+          setEngineStatus("Ready");
+          if (engineMode && game.turn() === engineColor) requestEngineMove();
+          return;
+        }
+        if (message.startsWith("bestmove")) {
+          if (engineAnalysisOnly) {
+            engineAnalysisOnly = false;
+            return;
+          }
+          if (ignoreNextBestmove) {
+            ignoreNextBestmove = false;
+            return;
+          }
+          engineThinking = false;
+          if (!engineMode || game.game_over()) return;
+
+          const uci = message.split(/\s+/)[1];
+          if (!uci || uci === "(none)") {
+            setEngineStatus("Game over");
+            return;
+          }
+          const from = uci.slice(0, 2);
+          const to = uci.slice(2, 4);
+          const promotion = uci[4] || "q";
+          const move = game.move({ from, to, promotion });
+          if (!move) {
+            setEngineStatus("Engine move error");
+            notify("Stockfish вернул недопустимый ход");
+            return;
+          }
+          // Rebuild the current line through the same storage/navigation path.
+          const currentMoves = game.history({ verbose: true });
+          const existing = lines.find(line => sameMoves(line.moves, currentMoves));
+          if (existing) {
+            currentLineId = existing.id;
+          } else {
+            getLine().moves = currentMoves;
+          }
+          history = getLine().moves;
+          cursor = history.length;
+          selected = null;
+          legalTargets = [];
+          renderAll();
+          setEngineStatus(game.game_over() ? "Game over" : "Your turn");
+          if (!game.game_over() && engineWorker) requestEngineEvaluation();
+          return;
+        }
+      });
+      engineWorker.addEventListener("error", error => {
+        console.error("Stockfish worker error:", error);
+        setEngineStatus("Engine failed to load");
+        engineThinking = false;
+        notify("Не удалось загрузить Stockfish. Проверь наличие JS и WASM файлов.");
+      });
+      engineWorker.postMessage("uci");
+      return true;
+    } catch (error) {
+      console.error("Could not start Stockfish:", error);
+      setEngineStatus("Engine unavailable");
+      notify("Не удалось запустить Stockfish. Проверь файлы движка рядом с index.html.");
+      return false;
+    }
+  }
+
+  function requestPositionEvaluation() {
+    // Always analyse the position currently shown on the board, including
+    // saved games and historical moves. A separate worker prevents analysis
+    // from interfering with Stockfish's actual moves in engine mode.
+    const requestId = ++evaluationRequestId;
+    if (evaluationWorker) {
+      try { evaluationWorker.terminate(); } catch {}
+      evaluationWorker = null;
+    }
+
+    evaluationTurn = game.turn();
+    const fen = game.fen();
+    const depth = Number($("engineDepth")?.value || 10);
+
+    try {
+      const worker = new Worker("./stockfish-19-lite-single.js");
+      evaluationWorker = worker;
+      worker.addEventListener("message", event => {
+        if (requestId !== evaluationRequestId || evaluationWorker !== worker) return;
+        const message = String(event.data || "").trim();
+        if (message.startsWith("info ")) {
+          updateEvaluationFromInfo(message);
+          return;
+        }
+        if (message === "uciok") {
+          worker.postMessage("isready");
+          return;
+        }
+        if (message === "readyok") {
+          worker.postMessage("position fen " + fen);
+          worker.postMessage("go depth " + depth);
+        }
+      });
+      worker.addEventListener("error", error => {
+        if (requestId !== evaluationRequestId) return;
+        console.error("Stockfish evaluation worker error:", error);
+        if ($("evaluationValue")) $("evaluationValue").textContent = "—";
+      });
+      worker.postMessage("uci");
+    } catch (error) {
+      console.error("Could not start Stockfish evaluation worker:", error);
+      if ($("evaluationValue")) $("evaluationValue").textContent = "—";
+    }
+  }
+
+  function requestEngineEvaluation() {
+    // Kept as a compatibility wrapper for existing call sites.
+    requestPositionEvaluation();
+  }
+
+  function requestEngineMove() {
+    if (!engineMode || !engineWorker || engineThinking || game.game_over()) return;
+    if (game.turn() !== engineColor) return;
+
+    if (engineAnalysisOnly) {
+      ignoreNextBestmove = true;
+      engineAnalysisOnly = false;
+      try { engineWorker.postMessage("stop"); } catch {}
+    }
+    engineThinking = true;
+    evaluationTurn = game.turn();
+    const request = ++engineRequest;
+    setEngineStatus("Stockfish is thinking…");
+    engineWorker.postMessage("position fen " + game.fen());
+    engineWorker.postMessage("go depth " + Number($("engineDepth").value || 10));
+  }
+
+  function startEngineGame() {
+    closeEngine();
+    engineMode = true;
+    engineColor = $("engineSide").value === "w" ? "b" : "w";
+    flipped = engineColor === "w";
+    resetGame();
+
+    const humanName = "You";
+    loadMeta({
+      white: engineColor === "w" ? "Stockfish" : humanName,
+      black: engineColor === "b" ? "Stockfish" : humanName,
+      event: "Game vs Stockfish",
+      date: new Date().toISOString().slice(0, 10),
+      notes: ""
+    });
+    renderAll();
+    setEngineStatus("Loading Stockfish…");
+    $("engineUndoBtn").disabled = false;
+
+    if (!createEngine()) {
+      engineMode = false;
+      $("engineUndoBtn").disabled = true;
+      return;
+    }
+    // The worker's readyok response starts the engine if it has the first move.
+    if (game.turn() !== engineColor) setEngineStatus("Your turn");
+  }
+
+  function undoEngineTurn() {
+    if (!engineMode) return;
+    const wasThinking = engineThinking;
+    if (wasThinking) closeEngine();
+    else stopEngineSearch();
+
+    // Remove the player's move and the engine's reply as one complete turn.
+    const target = Math.max(0, cursor - 2);
+    goTo(target);
+
+    if (wasThinking && createEngine()) {
+      setEngineStatus("Loading Stockfish…");
+    } else if (game.turn() === engineColor) {
+      requestEngineMove();
+    } else {
+      setEngineStatus("Your turn");
+    }
+  }
+
   function tryMove(from, to) {
+
+    if (engineMode && (engineThinking || game.turn() === engineColor || cursor !== history.length)) {
+      return;
+    }
 
     // If the expected move is chosen, continue the current line.
 
@@ -1303,6 +1586,7 @@ square.addEventListener("click", event => {
 
 
     goTo(cursor);
+    if (engineMode && !game.game_over()) requestEngineMove();
 
   }
 
@@ -1934,6 +2218,8 @@ square.addEventListener("click", event => {
     renderMoves();
 
     renderStatus();
+
+    renderMaterial();
 
     updateHeading();
 
@@ -2600,7 +2886,10 @@ square.addEventListener("click", event => {
 
 
   function resetGame() {
+    renderEvaluation(0);
+    engineAnalysisOnly = false;
 
+    if (engineMode) stopEngineSearch();
     game = new Chess();
 
 
@@ -2658,6 +2947,7 @@ square.addEventListener("click", event => {
 
 
     renderAll();
+    requestPositionEvaluation();
 
   }
 
@@ -2697,7 +2987,20 @@ square.addEventListener("click", event => {
 
   function installEvents() {
 
+    const engineModal = $("engineModal");
+    $("engineModalOpenBtn").addEventListener("click", () => { engineModal.hidden = false; });
+    $("engineModalCloseBtn").addEventListener("click", () => { engineModal.hidden = true; });
+    engineModal.addEventListener("click", event => { if (event.target === engineModal) engineModal.hidden = true; });
+    $("engineStartBtn").addEventListener("click", () => { startEngineGame(); engineModal.hidden = true; });
+    $("engineUndoBtn").addEventListener("click", undoEngineTurn);
+
     $("newGameBtn").addEventListener("click", () => {
+      if (engineMode) {
+        closeEngine();
+        engineMode = false;
+        $("engineUndoBtn").disabled = true;
+        setEngineStatus("Engine is off");
+      }
 
       if (
 
@@ -2875,7 +3178,8 @@ square.addEventListener("click", event => {
 
       "saveBtn", "exportBtn", "importBtn", "fileInput",
 
-      "searchInput", "backupInput", "backupBtn"
+      "searchInput", "backupInput", "backupBtn",
+      "engineSide", "engineDepth", "engineStartBtn", "engineUndoBtn", "engineStatus"
 
     ];
 
@@ -2925,6 +3229,23 @@ square.addEventListener("click", event => {
   }
 
 
+
+  // Keep the evaluation bar exactly as tall as the visible chessboard.
+  function syncEvaluationBarHeight() {
+    const board = $("board");
+    const bar = $("evaluationBar");
+    if (!board || !bar) return;
+    const height = board.getBoundingClientRect().height;
+    if (height > 0) bar.style.setProperty("--board-pixel-height", `${height}px`);
+  }
+
+  window.addEventListener("resize", syncEvaluationBarHeight);
+  if (typeof ResizeObserver !== "undefined") {
+    const boardSizeObserver = new ResizeObserver(syncEvaluationBarHeight);
+    const boardElement = $("board");
+    if (boardElement) boardSizeObserver.observe(boardElement);
+  }
+  requestAnimationFrame(syncEvaluationBarHeight);
 
   initialize();
 

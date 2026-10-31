@@ -6,77 +6,73 @@
   <title>Chess Study — Personal Chess Database</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-  <script>
-    if (typeof Chess === "undefined") {
-      document.write('<script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"><\/script>');
-    }
-  </script>
+  <script>if (typeof Chess === "undefined") document.write('<script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"><\/script>');</script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand"><span class="brand-mark">♞</span><span>Chess Study</span></div>
-    <div class="top-actions">
-      <button id="newGameBtn" class="btn ghost">New game</button>
-      <button id="importBtn" class="btn ghost">Import PGN</button>
-      <button id="exportBtn" class="btn primary">Export PGN</button>
-      <input id="fileInput" type="file" accept=".pgn,.txt" hidden>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">♞</span><span>Chess Study</span></div>
+  <div class="top-actions">
+    <button id="newGameBtn" class="btn ghost">New game</button>
+    <button id="engineModalOpenBtn" class="btn primary">Play vs Stockfish</button>
+    <button id="importBtn" class="btn ghost">Import PGN</button>
+    <button id="exportBtn" class="btn ghost">Export PGN</button>
+    <input id="fileInput" type="file" accept=".pgn,.txt" hidden>
+  </div>
+</header>
+<main class="layout">
+  <section class="board-panel panel">
+    <div class="game-heading">
+      <div><div class="eyebrow">ANALYSIS BOARD</div><h1 id="gameTitle">Untitled game</h1><p id="gameMeta">White vs Black · Casual game</p></div>
+      <button id="flipBtn" class="icon-btn" title="Flip board" aria-label="Flip board">⇅</button>
     </div>
-  </header>
-
-  <main class="layout">
-    <section class="board-panel panel">
-      <div class="game-heading">
-        <div>
-          <div class="eyebrow">ANALYSIS BOARD</div>
-          <h1 id="gameTitle">Untitled game</h1>
-          <p id="gameMeta">White vs Black · Casual game</p>
-        </div>
-        <button id="flipBtn" class="icon-btn" title="Flip board" aria-label="Flip board">⇅</button>
+    <div class="board-workspace">
+      <div class="evaluation-wrap" aria-label="Stockfish evaluation">
+        <div class="evaluation-bar" id="evaluationBar"><div class="eval-black" id="evalBlack"></div><div class="eval-white" id="evalWhite"></div><div class="eval-center"></div></div>
+        <div class="evaluation-value" id="evaluationValue">—</div>
       </div>
-      <div class="player-row black-player"><span class="avatar">♚</span><span id="blackName">Black</span><span class="player-tag">BLACK</span></div>
-      <div id="board" class="board" aria-label="Chess board"></div>
-      <div class="player-row white-player"><span class="avatar">♔</span><span id="whiteName">White</span><span class="player-tag">WHITE</span></div>
-      <div class="board-controls">
-        <button id="firstBtn" class="control-btn" title="First move">|◀</button>
-        <button id="backBtn" class="control-btn" title="Previous move">‹</button>
-        <button id="forwardBtn" class="control-btn" title="Next move">›</button>
-        <button id="lastBtn" class="control-btn" title="Last move">▶|</button>
-        <span class="move-counter" id="moveCounter">Start position</span>
+      <div class="board-column">
+        <div class="player-row black-player"><span class="avatar">♚</span><span id="blackName">Black</span><span id="blackMaterial" class="material-advantage"></span><span class="player-tag">BLACK</span></div>
+        <div id="board" class="board" aria-label="Chess board"></div>
+        <div class="player-row white-player"><span class="avatar">♔</span><span id="whiteName">White</span><span id="whiteMaterial" class="material-advantage"></span><span class="player-tag">WHITE</span></div>
+        <div class="board-controls">
+          <button id="firstBtn" class="control-btn" title="First move">|◀</button><button id="backBtn" class="control-btn" title="Previous move">‹</button><button id="forwardBtn" class="control-btn" title="Next move">›</button><button id="lastBtn" class="control-btn" title="Last move">▶|</button><span class="move-counter" id="moveCounter">Start position</span>
+        </div>
+        <div id="status" class="status">White to move</div>
       </div>
-      <div id="status" class="status">White to move</div>
-    </section>
-
-    <aside class="side-column">
-      <section class="panel moves-panel">
-        <div class="section-title"><h2>Moves</h2><span class="subtle">English notation · SAN</span></div>
-        <div id="moveList" class="move-list"><div class="empty">Moves will appear here.</div></div>
-      </section>
-
-      <section class="panel details-panel">
-        <div class="section-title"><h2>Game details</h2><span class="subtle">Edit metadata</span></div>
-        <label>White <input id="whiteInput" value="White" maxlength="80"></label>
-        <label>Black <input id="blackInput" value="Black" maxlength="80"></label>
-        <div class="two-fields">
-          <label>Event <input id="eventInput" value="Casual game" maxlength="100"></label>
-          <label>Date <input id="dateInput" type="date"></label>
-        </div>
-        <label>Opening / notes <textarea id="notesInput" rows="2" placeholder="Opening name, ideas, mistakes..."></textarea></label>
-        <button id="saveBtn" class="btn primary full">Save to my database</button>
-        <div class="small-note">Games are stored in this browser on this device (localStorage).</div>
-      </section>
-
-      <section class="panel database-panel">
-        <div class="section-title"><h2>My games</h2><span class="subtle" id="gameCount">0 saved</span></div>
-        <div class="db-tools">
-          <input id="searchInput" placeholder="Search players, event, notes…">
-          <button id="backupBtn" class="btn ghost compact">Backup</button>
-          <input id="backupInput" type="file" accept=".json" hidden>
-        </div>
-        <div id="savedGames" class="saved-games"><div class="empty">No saved games yet.</div></div>
-      </section>
-    </aside>
-  </main>
-  <div id="toast" class="toast" role="status"></div>
-  <script src="app.js"></script>
+    </div>
+  </section>
+  <aside class="moves-panel panel">
+    <div class="section-title"><h2>Moves</h2><span class="subtle">English notation · SAN</span></div>
+    <div id="moveList" class="move-list"><div class="empty">Moves will appear here.</div></div>
+  </aside>
+  <section class="details-panel panel">
+    <div class="section-title"><h2>Game details</h2><span class="subtle">Edit metadata</span></div>
+    <div class="details-grid">
+      <label>White <input id="whiteInput" value="White" maxlength="80"></label>
+      <label>Black <input id="blackInput" value="Black" maxlength="80"></label>
+      <label>Event <input id="eventInput" value="Casual game" maxlength="100"></label>
+      <label>Date <input id="dateInput" type="date"></label>
+      <label class="notes-field">Opening / notes <textarea id="notesInput" rows="2" placeholder="Opening name, ideas, mistakes..."></textarea></label>
+      <div class="save-field"><button id="saveBtn" class="btn primary full">Save to my database</button><div class="small-note">Games are stored in this browser on this device (localStorage).</div></div>
+    </div>
+  </section>
+  <section class="database-panel panel">
+    <div class="section-title"><h2>My games</h2><span class="subtle" id="gameCount">0 saved</span></div>
+    <div class="db-tools"><input id="searchInput" placeholder="Search players, event, notes…"><button id="backupBtn" class="btn ghost compact">Backup</button><input id="backupInput" type="file" accept=".json" hidden></div>
+    <div id="savedGames" class="saved-games"><div class="empty">No saved games yet.</div></div>
+  </section>
+</main>
+<div id="engineModal" class="modal-backdrop" hidden>
+  <section class="engine-dialog panel" role="dialog" aria-modal="true" aria-labelledby="engineDialogTitle">
+    <div class="section-title"><h2 id="engineDialogTitle">Play vs Stockfish</h2><button id="engineModalCloseBtn" class="icon-btn" aria-label="Close">×</button></div>
+    <label>Play as<select id="engineSide"><option value="w">White</option><option value="b">Black</option></select></label>
+    <label>Difficulty<select id="engineDepth"><option value="5">Beginner</option><option value="10" selected>Club player</option><option value="15">Strong</option><option value="20">Very strong</option></select></label>
+    <div class="engine-modal-status" id="engineStatus">Engine is off</div>
+    <div class="engine-actions"><button id="engineStartBtn" class="btn primary">Start game</button><button id="engineUndoBtn" class="btn ghost" disabled>Undo turn</button></div>
+    <p class="engine-note">Stockfish files must be beside index.html.</p>
+  </section>
+</div>
+<div id="toast" class="toast" role="status"></div>
+<script src="app.js"></script>
 </body>
 </html>

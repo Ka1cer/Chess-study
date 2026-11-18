@@ -77,6 +77,11 @@
 
   let variationNumber = 1;
 
+  // ---------- Appearance preferences ----------
+  const APPEARANCE_STORE = "chess-study-appearance-v1";
+  let appearanceSettings = { theme: "system", liquidGlass: false, glassStrength: 65, glassOpacity: 65, pieceAnimation: true, pieceSet: "modern", soundEnabled: true, background: "" };
+  let lastRenderedCursor = null;
+
   // ---------- Stockfish game mode ----------
   let engineWorker = null;
   let evaluationWorker = null;
@@ -84,14 +89,239 @@
   let engineMode = false;
   let engineColor = "b"; // The computer plays Black by default.
   let engineThinking = false;
+  let engineMoveTimer = null;
+  const ENGINE_MOVE_DELAY_MS = 700;
   let engineRequest = 0;
   let engineAnalysisOnly = false;
   let lastEvaluation = 0;
   let ignoreNextBestmove = false;
   let evaluationTurn = "w";
+  let engineGameEnded = false;
+  let pendingPromotion = null;
 
 
 
+
+  function readAppearanceSettings() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(APPEARANCE_STORE) || "{}");
+      appearanceSettings = { ...appearanceSettings, ...saved };
+    } catch (error) { console.warn("Chess Study: could not read appearance settings", error); }
+  }
+
+  function saveAppearanceSettings() {
+    try { localStorage.setItem(APPEARANCE_STORE, JSON.stringify(appearanceSettings)); return true; }
+    catch (error) { console.warn("Chess Study: could not save appearance settings", error); notify("Не удалось сохранить настройки. Возможно, в хранилище недостаточно места."); return false; }
+  }
+
+  // Chess move sounds are separate files in ./audio so they can be replaced
+  // without changing the application code.
+  const CHESS_SOUND_FILES = {
+    move: "./audio/move.mp3",
+    capture: "./audio/capture.mp3",
+    check: "./audio/check.mp3",
+    castle: "./audio/castle.mp3",
+    mate: "./audio/mate.mp3"
+  };
+  const chessAudio = {};
+  let chessAudioUnlocked = false;
+
+  function getChessAudio(kind) {
+    if (!chessAudio[kind]) {
+      const audio = new Audio(CHESS_SOUND_FILES[kind]);
+      audio.preload = "auto";
+      audio.volume = 0.9;
+      chessAudio[kind] = audio;
+    }
+    return chessAudio[kind];
+  }
+
+  function playChessSound(kind) {
+    if (appearanceSettings.soundEnabled === false || !CHESS_SOUND_FILES[kind]) return;
+    try {
+      const audio = getChessAudio(kind);
+      audio.pause();
+      audio.currentTime = 0;
+      const playback = audio.play();
+      if (playback && typeof playback.catch === "function") {
+        playback.catch(error => console.debug("Chess Study: sound playback was blocked", error));
+      }
+    } catch (error) {
+      console.debug("Chess Study: sound playback unavailable", error);
+    }
+  }
+
+  function unlockChessAudio() {
+    if (appearanceSettings.soundEnabled === false || chessAudioUnlocked) return;
+    // Prime each HTMLAudioElement during a user gesture. This allows later
+    // asynchronous Stockfish replies to play their sounds as well.
+    chessAudioUnlocked = true;
+    Object.keys(CHESS_SOUND_FILES).forEach(kind => {
+      try {
+        const audio = getChessAudio(kind);
+        audio.muted = true;
+        audio.currentTime = 0;
+        const playback = audio.play();
+        if (playback && typeof playback.then === "function") {
+          playback.then(() => {
+            window.setTimeout(() => {
+              audio.pause();
+              audio.currentTime = 0;
+              audio.muted = false;
+            }, 80);
+          }).catch(() => { audio.muted = false; chessAudioUnlocked = false; });
+        } else {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.muted = false;
+        }
+      } catch (error) {
+        console.debug("Chess Study: audio could not be unlocked", error);
+      }
+    });
+  }
+
+  function playMoveSound(move) {
+    if (!move) return;
+    if (game.in_checkmate()) playChessSound("mate");
+    else if (game.in_check()) playChessSound("check");
+    else if (move.flags && (move.flags.includes("k") || move.flags.includes("q"))) playChessSound("castle");
+    else if (move.captured) playChessSound("capture");
+    else playChessSound("move");
+  }
+
+  function applyAppearanceSettings() {
+    const theme = ["system", "dark", "light"].includes(appearanceSettings.theme) ? appearanceSettings.theme : "system";
+    const resolvedTheme = theme === "system"
+      ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+      : theme;
+    document.body.classList.toggle("light-theme", resolvedTheme === "light");
+    document.body.classList.toggle("dark-theme", resolvedTheme === "dark");
+    document.body.dataset.theme = theme;
+    document.body.classList.toggle("liquid-glass", !!appearanceSettings.liquidGlass);
+    const strength = Math.max(20, Math.min(100, Number(appearanceSettings.glassStrength ?? 65)));
+    const opacity = Math.max(0, Math.min(100, Number(appearanceSettings.glassOpacity ?? 65)));
+    document.body.style.setProperty("--glass-strength", String(strength));
+    document.body.style.setProperty("--glass-alpha", String(0.82 - opacity * 0.0064));
+    document.body.style.setProperty("--glass-blur", `${8 + strength * 0.21}px`);
+    document.body.style.setProperty("--glass-highlight", String(0.04 + strength * 0.0012));
+    if (appearanceSettings.background) {
+      document.body.classList.add("has-custom-background");
+      document.body.style.setProperty("--custom-bg-image", `url("${appearanceSettings.background}")`);
+    } else {
+      document.body.classList.remove("has-custom-background");
+      document.body.style.removeProperty("--custom-bg-image");
+    }
+    const themeSelect = $("themeSelect");
+    const glassToggle = $("liquidGlassToggle"), glassStrength = $("glassStrength"), glassOpacity = $("glassOpacity");
+    const glassValue = $("glassStrengthValue"), opacityValue = $("glassOpacityValue"), animationToggle = $("pieceAnimationToggle");
+    const pieceSetSelect = $("pieceSetSelect");
+    const soundToggle = $("soundToggle");
+    if (themeSelect) themeSelect.value = theme;
+    if (glassToggle) glassToggle.checked = !!appearanceSettings.liquidGlass;
+    if (glassStrength) glassStrength.value = strength;
+    if (glassValue) glassValue.textContent = `${strength}%`;
+    if (glassOpacity) glassOpacity.value = opacity;
+    if (opacityValue) opacityValue.textContent = `${opacity}%`;
+    if (animationToggle) animationToggle.checked = appearanceSettings.pieceAnimation !== false;
+    if (pieceSetSelect) pieceSetSelect.value = appearanceSettings.pieceSet === "classic" ? "classic" : "modern";
+    if (soundToggle) soundToggle.checked = appearanceSettings.soundEnabled !== false;
+    const bgStatus = $("backgroundStatus");
+    if (bgStatus) bgStatus.textContent = appearanceSettings.background ? "Собственный фон установлен и сохранён в этом браузере." : "Поддерживаются JPG, PNG и WebP. Изображение будет сохранено в этом браузере.";
+  }
+
+  let activePieceAnimation = null;
+  // One-render override for the input method that produced the next move.
+  // "default" preserves normal navigation and Stockfish animation behavior.
+  let nextMoveAnimationMode = "default";
+
+  function clearPieceAnimation() {
+    if (!activePieceAnimation) return;
+    const active = activePieceAnimation;
+    activePieceAnimation = null;
+    if (active.animation) active.animation.cancel();
+    if (active.ghost) active.ghost.remove();
+    if (active.destination) active.destination.style.removeProperty("opacity");
+  }
+
+  // Capture the actual rendered piece before the board is rebuilt. This avoids
+  // the size/position jump caused by cloning the already-rendered destination.
+  function captureMoveAnimation(move) {
+    if (!appearanceSettings.pieceAnimation || !move || !move.from || !move.to) return null;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
+    const board = $("board");
+    const source = board && board.querySelector(`[data-square="${move.from}"] .piece`);
+    if (!source) return null;
+    const rect = source.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return { piece: source.cloneNode(true), rect };
+  }
+
+  function animatePieceMove(move, snapshot) {
+    if (!snapshot || !move) return;
+    const board = $("board");
+    const destinationSquare = board && board.querySelector(`[data-square="${move.to}"]`);
+    const destination = destinationSquare && destinationSquare.querySelector(".piece");
+    if (!destination || typeof Element.prototype.animate !== "function") return;
+
+    clearPieceAnimation();
+    const targetRect = destination.getBoundingClientRect();
+    const startRect = snapshot.rect;
+    const dx = targetRect.left - startRect.left;
+    const dy = targetRect.top - startRect.top;
+    const ghost = snapshot.piece;
+    ghost.classList.add("piece-animation-ghost");
+    ghost.removeAttribute("draggable");
+    ghost.style.left = `${startRect.left}px`;
+    ghost.style.top = `${startRect.top}px`;
+    ghost.style.width = `${startRect.width}px`;
+    ghost.style.height = `${startRect.height}px`;
+    ghost.style.margin = "0";
+    ghost.style.transform = "translate3d(0,0,0)";
+    document.body.appendChild(ghost);
+
+    // The real piece is already in its final square; hide it until the moving
+    // copy arrives so the user sees one continuous piece, not two.
+    destination.style.setProperty("opacity", "0", "important");
+    const distance = Math.hypot(dx, dy);
+    const duration = Math.max(120, Math.min(220, 105 + distance * 0.16));
+    const animation = ghost.animate(
+      [
+        { transform: "translate3d(0,0,0)", offset: 0 },
+        { transform: `translate3d(${dx}px,${dy}px,0)`, offset: 1 }
+      ],
+      { duration, easing: "cubic-bezier(0.2, 0, 0, 1)", fill: "forwards" }
+    );
+    activePieceAnimation = { animation, ghost, destination };
+    const cleanup = () => {
+      if (activePieceAnimation && activePieceAnimation.animation === animation) activePieceAnimation = null;
+      ghost.remove();
+      destination.style.removeProperty("opacity");
+    };
+    animation.onfinish = cleanup;
+    animation.oncancel = cleanup;
+  }
+
+  function compressBackgroundImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Не удалось прочитать изображение."));
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = () => reject(new Error("Файл не удалось распознать как изображение."));
+        image.onload = () => {
+          const scale = Math.min(1, 1920 / Math.max(image.naturalWidth, image.naturalHeight));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.82));
+        };
+        image.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 
   // ---------- General helpers ----------
 
@@ -259,8 +489,8 @@
 
       #board .piece img {
         display: block;
-        width: 90%;
-        height: 90%;
+        width: 89%;
+        height: 89%;
         object-fit: contain;
         pointer-events: none;
         user-select: none;
@@ -347,25 +577,6 @@
 
       }
 
-      .chess-board-frame {
-        display: grid;
-        grid-template-columns: 22px minmax(0, 1fr);
-        grid-template-rows: minmax(0, 1fr) 22px;
-        width: 100%;
-        max-width: 582px;
-        margin: 0 auto;
-        align-items: stretch;
-      }
-      .chess-board-frame #board {
-        grid-column: 2;
-        grid-row: 1;
-        width: 100%;
-        max-width: 560px;
-        min-width: 0;
-        height: auto;
-        aspect-ratio: 1 / 1;
-        box-sizing: border-box;
-      }
       .chess-load-error {
         grid-column: 1 / -1;
         padding: 24px 16px;
@@ -374,21 +585,7 @@
         background: #201f1c;
         border-radius: 8px;
       }
-      .chess-outside-ranks {
-        grid-column: 1; grid-row: 1;
-        display: grid; grid-template-rows: repeat(8, minmax(0, 1fr));
-        align-items: center; justify-items: center; font-size: 12px;
-        color: var(--muted, #999); user-select: none;
-      }
-      .chess-outside-files {
-        grid-column: 2; grid-row: 2;
-        display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
-        align-items: center; justify-items: center; font-size: 12px;
-        color: var(--muted, #999); user-select: none;
-      }
-
-
-
+      
       #board svg.chess-arrow-layer {
 
         position: absolute;
@@ -799,7 +996,13 @@
 
   function goTo(n) {
 
+    const previousCursor = cursor;
     replayPosition(n);
+    // When the user browses an already played game, play the sound belonging
+    // to the position now shown. This works in both forward and reverse review.
+    if (cursor !== previousCursor && cursor > 0) {
+      playMoveSound(history[cursor - 1]);
+    }
 
     selected = null;
 
@@ -919,6 +1122,12 @@
   function renderBoard() {
 
     const board = $("board");
+    const previousCursor = lastRenderedCursor;
+    const animationMode = nextMoveAnimationMode;
+    nextMoveAnimationMode = "default";
+    const animatedMove = animationMode !== "none" && previousCursor !== null && cursor === previousCursor + 1 ? history[cursor - 1] : null;
+    clearPieceAnimation();
+    const animationSnapshot = animatedMove ? captureMoveAnimation(animatedMove) : null;
 
     if (!board) return;
 
@@ -1023,16 +1232,21 @@
 
           const colorName = pieceAtSquare.color === "w" ? "white" : "black";
           const pieceName = pieceNames[pieceAtSquare.type];
-          const pieceImage = document.createElement("img");
-          pieceImage.src = `chess_pieces/${colorName}-${pieceName}.png`;
-          pieceImage.alt = `${colorName} ${pieceName}`;
-          pieceImage.draggable = false;
-          pieceImage.setAttribute("aria-hidden", "true");
-          pieceImage.addEventListener("error", () => {
-            // Keep the board playable even if the asset folder is moved or renamed.
+          if (appearanceSettings.pieceSet === "classic") {
             piece.textContent = glyph[pieceAtSquare.color][pieceAtSquare.type];
-          }, { once: true });
-          piece.appendChild(pieceImage);
+            piece.classList.add("unicode-piece");
+          } else {
+            const pieceImage = document.createElement("img");
+            pieceImage.src = `chess_pieces/${colorName}-${pieceName}.png`;
+            pieceImage.alt = `${colorName} ${pieceName}`;
+            pieceImage.draggable = false;
+            pieceImage.setAttribute("aria-hidden", "true");
+            pieceImage.addEventListener("error", () => {
+              // Keep the board playable even if the asset folder is moved or renamed.
+              piece.textContent = glyph[pieceAtSquare.color][pieceAtSquare.type];
+            }, { once: true });
+            piece.appendChild(pieceImage);
+          }
 
 
           piece.draggable = true;
@@ -1122,7 +1336,7 @@ square.addEventListener("click", event => {
 
 
 
-          if (from) tryMove(from, sq);
+          if (from) tryMove(from, sq, "drag");
 
           dragFrom = null;
 
@@ -1147,6 +1361,8 @@ square.addEventListener("click", event => {
 
 
     renderArrows();
+    if (animatedMove && animationSnapshot) animatePieceMove(animatedMove, animationSnapshot);
+    lastRenderedCursor = cursor;
 
   }
 
@@ -1198,12 +1414,66 @@ square.addEventListener("click", event => {
 
 
 
-  function renderEvaluation(score, mate = null) {
+  function isCompletedPosition() {
+    return game.game_over() || (typeof game.in_threefold_repetition === "function" && game.in_threefold_repetition());
+  }
+
+  function updateEngineEndUI() {
+    const button = $("resignBtn");
+    const bar = $("evaluationBar");
+    const value = $("evaluationValue");
+    const ended = engineMode && isCompletedPosition();
+    if (ended) engineGameEnded = true;
+    if (button) {
+      button.hidden = !engineMode;
+      button.disabled = !engineMode || engineGameEnded;
+      button.setAttribute("aria-disabled", String(button.disabled));
+    }
+    if (bar) bar.hidden = engineMode && !engineGameEnded;
+    if (value) value.hidden = engineMode && !engineGameEnded;
+    if (engineMode && engineGameEnded) requestPositionEvaluation();
+  }
+
+  function resignEngineGame() {
+    if (!engineMode || engineGameEnded || isCompletedPosition()) return;
+    engineGameEnded = true;
+    stopEngineSearch();
+    setEngineStatus("Resigned");
+    if (typeof game.turn === "function") {
+      // Record resignation as PGN metadata without inventing a chess move.
+      game.header("Result", game.turn() === "w" ? "0-1" : "1-0");
+    }
+    updateEngineEndUI();
+    notify("Вы сдались. Партия завершена.");
+  }
+
+  function showPromotionChooser(from, to, inputMethod = "click") {
+    pendingPromotion = { from, to, inputMethod };
+    let modal = $("promotionModal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "promotionModal";
+      modal.className = "modal-backdrop";
+      modal.innerHTML = '<div class="engine-dialog panel promotion-dialog" role="dialog" aria-modal="true" aria-labelledby="promotionTitle"><div class="section-title"><h2 id="promotionTitle">Promote pawn</h2></div><p>Choose a piece:</p><div class="promotion-options"><button data-promotion="q">♕<span>Queen</span></button><button data-promotion="r">♖<span>Rook</span></button><button data-promotion="b">♗<span>Bishop</span></button><button data-promotion="n">♘<span>Knight</span></button></div><button class="btn ghost" id="promotionCancelBtn" type="button">Cancel</button></div>';
+      document.body.appendChild(modal);
+      modal.querySelectorAll("[data-promotion]").forEach(button => button.addEventListener("click", () => {
+        const choice = button.dataset.promotion;
+        const move = pendingPromotion;
+        pendingPromotion = null;
+        modal.hidden = true;
+        if (move) commitMove(move.from, move.to, choice, move.inputMethod);
+      }));
+      modal.querySelector("#promotionCancelBtn").addEventListener("click", () => { pendingPromotion = null; modal.hidden = true; });
+    }
+    modal.hidden = false;
+  }
+
+  function renderEvaluation(score, mate = null, mateWinner = null) {
     const valueEl = $("evaluationValue");
     const whiteEl = $("evalWhite");
     const blackEl = $("evalBlack");
     if (mate !== null) {
-      const whiteMate = mate > 0;
+      const whiteMate = mateWinner ? mateWinner === "w" : mate > 0;
       if (valueEl) valueEl.textContent = `M${Math.abs(mate)}`;
       const whiteShare = whiteMate ? 0.96 : 0.04;
       if (whiteEl) whiteEl.style.height = `${whiteShare * 100}%`;
@@ -1248,6 +1518,10 @@ square.addEventListener("click", event => {
   }
 
   function stopEngineSearch() {
+    if (engineMoveTimer !== null) {
+      clearTimeout(engineMoveTimer);
+      engineMoveTimer = null;
+    }
     engineRequest++;
     if (engineWorker && (engineThinking || engineAnalysisOnly)) {
       ignoreNextBestmove = true;
@@ -1304,6 +1578,7 @@ square.addEventListener("click", event => {
           const uci = message.split(/\s+/)[1];
           if (!uci || uci === "(none)") {
             setEngineStatus("Game over");
+            updateEngineEndUI();
             return;
           }
           const from = uci.slice(0, 2);
@@ -1315,6 +1590,7 @@ square.addEventListener("click", event => {
             notify("Stockfish вернул недопустимый ход");
             return;
           }
+          playMoveSound(move);
           // Rebuild the current line through the same storage/navigation path.
           const currentMoves = game.history({ verbose: true });
           const existing = lines.find(line => sameMoves(line.moves, currentMoves));
@@ -1328,8 +1604,9 @@ square.addEventListener("click", event => {
           selected = null;
           legalTargets = [];
           renderAll();
-          setEngineStatus(game.game_over() ? "Game over" : "Your turn");
-          if (!game.game_over() && engineWorker) requestEngineEvaluation();
+          updateEngineEndUI();
+          setEngineStatus(isCompletedPosition() ? "Game over" : "Your turn");
+          if (!isCompletedPosition() && engineWorker) requestEngineEvaluation();
           return;
         }
       });
@@ -1357,6 +1634,14 @@ square.addEventListener("click", event => {
     if (evaluationWorker) {
       try { evaluationWorker.terminate(); } catch {}
       evaluationWorker = null;
+    }
+
+    // A checkmated position is terminal: Stockfish may report "mate 0",
+    // whose sign cannot reliably identify the winner. Determine it from chess.js.
+    if (game.in_checkmate()) {
+      const winner = game.turn() === "w" ? "b" : "w";
+      renderEvaluation(0, 0, winner);
+      return;
     }
 
     evaluationTurn = game.turn();
@@ -1394,6 +1679,190 @@ square.addEventListener("click", event => {
     }
   }
 
+
+  // ---------- Game evaluation graph ----------
+  let graphWorker = null;
+  let graphRequestId = 0;
+
+  function ensureEvaluationGraph() {
+    let panel = $("evaluationGraph");
+    if (panel) return panel;
+    panel = document.createElement("section");
+    panel.id = "evaluationGraph";
+    panel.className = "evaluation-graph panel";
+    panel.hidden = true;
+    panel.innerHTML = `
+      <div class="evaluation-graph-heading"><strong>Перевес по ходам</strong><span id="graphStatus">Подготовка анализа…</span></div>
+      <canvas id="evaluationGraphCanvas" height="150" aria-label="График оценки позиции по ходам"></canvas>
+      <div class="evaluation-graph-legend"><span>Белые: +</span><span>Чёрные: −</span></div>`;
+    const movesPanel = document.querySelector(".moves-panel");
+    if (movesPanel) movesPanel.insertAdjacentElement("afterend", panel);
+    return panel;
+  }
+
+  function drawEvaluationGraph(values) {
+    const canvas = $("evaluationGraphCanvas");
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(280, Math.round(rect.width || 320));
+    const height = 190;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const pad = { l: 38, r: 12, t: 12, b: 25 };
+    const plotW = width - pad.l - pad.r;
+    const plotH = height - pad.t - pad.b;
+    const max = Math.max(2, ...values.map(v => Math.abs(v.score)));
+    const bound = Math.min(12, Math.ceil(max / 2) * 2);
+    const y = score => pad.t + (bound - score) / (bound * 2) * plotH;
+    const zeroY = y(0);
+
+    ctx.fillStyle = "#343434";
+    ctx.fillRect(pad.l, pad.t, plotW, plotH);
+
+    ctx.font = "10px sans-serif";
+    ctx.textBaseline = "middle";
+    [-bound, 0, bound].forEach(v => {
+      const yy = y(v);
+      ctx.beginPath();
+      ctx.setLineDash(v === 0 ? [6, 5] : []);
+      ctx.strokeStyle = v === 0 ? "rgba(235,235,235,.48)" : "rgba(220,220,220,.14)";
+      ctx.lineWidth = 1;
+      ctx.moveTo(pad.l, yy);
+      ctx.lineTo(width - pad.r, yy);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(220,220,220,.72)";
+      ctx.fillText(v > 0 ? `+${v}` : `${v}`, 3, yy);
+    });
+    ctx.setLineDash([]);
+
+    if (values.length) {
+      const points = values.map((v, i) => ({
+        x: pad.l + (values.length === 1 ? plotW / 2 : i / (values.length - 1) * plotW),
+        y: y(v.score),
+        score: v.score
+      }));
+
+      // White area for White's advantage, black area for Black's advantage.
+      for (let i = 0; i < points.length - 1; i++) {
+        const a = points[i], b = points[i + 1];
+        const segments = [{ x: a.x, y: a.y, score: a.score }, { x: b.x, y: b.y, score: b.score }];
+        if ((a.score < 0 && b.score > 0) || (a.score > 0 && b.score < 0)) {
+          const t = a.score / (a.score - b.score);
+          segments.splice(1, 0, { x: a.x + (b.x - a.x) * t, y: zeroY, score: 0 });
+        }
+        for (let j = 0; j < segments.length - 1; j++) {
+          const p1 = segments[j], p2 = segments[j + 1];
+          const midScore = (p1.score + p2.score) / 2;
+          ctx.beginPath();
+          ctx.moveTo(p1.x, zeroY);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.lineTo(p2.x, zeroY);
+          ctx.closePath();
+          ctx.fillStyle = midScore >= 0 ? "rgba(255,255,255,.92)" : "rgba(8,8,8,.96)";
+          ctx.fill();
+        }
+      }
+
+      ctx.beginPath();
+      points.forEach((point, i) => {
+        if (!i) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.strokeStyle = "#8bcf75";
+      ctx.lineWidth = 3;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+
+      points.forEach((point, i) => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, i === cursor ? 4 : 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = i === cursor ? "#f4d35e" : "#8bcf75";
+        ctx.fill();
+      });
+    }
+
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "rgba(220,220,220,.72)";
+    ctx.font = "10px sans-serif";
+    ctx.fillText("Начало", pad.l, height - 5);
+    ctx.fillText("Ходы", width - pad.r - 25, height - 5);
+  }
+
+  function analyzeGameGraph() {
+    const panel = ensureEvaluationGraph();
+    panel.hidden = false;
+    const status = $("graphStatus");
+    if (graphWorker) { try { graphWorker.terminate(); } catch {} graphWorker = null; }
+    const request = ++graphRequestId;
+    const moves = history.slice();
+    const positions = [];
+    const replay = new Chess();
+    positions.push({ fen: replay.fen(), turn: replay.turn() });
+    for (const move of moves) {
+      replay.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+      positions.push({ fen: replay.fen(), turn: replay.turn(), mate: replay.in_checkmate() });
+    }
+    if (!moves.length) { status.textContent = "В партии пока нет ходов"; drawEvaluationGraph([{score:0}]); return; }
+    const depth = 8;
+    const results = [];
+    let index = 0, waitingReady = false;
+    try {
+      const worker = new Worker("./stockfish-19-lite-single.js");
+      graphWorker = worker;
+      worker.addEventListener("message", e => {
+        if (request !== graphRequestId || graphWorker !== worker) return;
+        const msg = String(e.data || "").trim();
+        if (msg === "uciok") { worker.postMessage("isready"); return; }
+        if (msg === "readyok") { evaluateNext(); return; }
+        if (msg.startsWith("info ")) {
+          const score = msg.match(/\bscore (cp|mate) (-?\d+)/);
+          if (score) {
+            const raw = Number(score[2]);
+            const cp = score[1] === "mate" ? (raw > 0 ? 10 : -10) : raw / 100;
+            const whiteScore = positions[index].turn === "w" ? cp : -cp;
+            results[index] = { score: Math.max(-12, Math.min(12, whiteScore)) };
+          }
+          return;
+        }
+        if (msg.startsWith("bestmove")) {
+          if (!results[index]) results[index] = { score: 0 };
+          index++;
+          if (index < positions.length) evaluateNext();
+          else {
+            status.textContent = `${results.length} позиций · глубина ${depth}`;
+            drawEvaluationGraph(results);
+            try { worker.terminate(); } catch {}
+            graphWorker = null;
+          }
+        }
+      });
+      worker.addEventListener("error", () => {
+        if (request === graphRequestId) status.textContent = "Ошибка запуска Stockfish";
+      });
+      function evaluateNext() {
+        if (request !== graphRequestId || index >= positions.length) return;
+        if (positions[index].mate) {
+          results[index] = { score: positions[index].turn === "w" ? -10 : 10 };
+          index++;
+          if (index < positions.length) evaluateNext();
+          else { status.textContent = `${results.length} позиций`; drawEvaluationGraph(results); worker.terminate(); graphWorker = null; }
+          return;
+        }
+        status.textContent = `Анализ ${index+1}/${positions.length}…`;
+        worker.postMessage("position fen " + positions[index].fen);
+        worker.postMessage("go depth " + depth);
+      }
+      worker.postMessage("uci");
+    } catch (err) { status.textContent = "Не удалось запустить Stockfish"; }
+  }
+
   function requestEngineEvaluation() {
     // Kept as a compatibility wrapper for existing call sites.
     requestPositionEvaluation();
@@ -1419,6 +1888,7 @@ square.addEventListener("click", event => {
   function startEngineGame() {
     closeEngine();
     engineMode = true;
+    engineGameEnded = false;
     engineColor = $("engineSide").value === "w" ? "b" : "w";
     flipped = engineColor === "w";
     resetGame();
@@ -1432,6 +1902,7 @@ square.addEventListener("click", event => {
       notes: ""
     });
     renderAll();
+    updateEngineEndUI();
     setEngineStatus("Loading Stockfish…");
     $("engineUndoBtn").disabled = false;
 
@@ -1463,11 +1934,23 @@ square.addEventListener("click", event => {
     }
   }
 
-  function tryMove(from, to) {
-
-    if (engineMode && (engineThinking || game.turn() === engineColor || cursor !== history.length)) {
+  function tryMove(from, to, inputMethod = "click") {
+    if (engineMode && (engineGameEnded || isCompletedPosition() || engineThinking || game.turn() === engineColor || cursor !== history.length)) return;
+    const movingPiece = game.get(from);
+    if (movingPiece && movingPiece.type === "p" && (to[1] === "1" || to[1] === "8")) {
+      showPromotionChooser(from, to, inputMethod);
       return;
     }
+    commitMove(from, to, "q", inputMethod);
+  }
+
+  function commitMove(from, to, promotion, inputMethod = "click") {
+    if (engineMode && (engineGameEnded || isCompletedPosition() || engineThinking || game.turn() === engineColor || cursor !== history.length)) return;
+
+    // Click-to-move uses the smooth animation. Native drag-and-drop keeps
+    // its original immediate placement without the extra animated overlay.
+    // Stockfish and board navigation continue using the default behavior.
+    nextMoveAnimationMode = inputMethod === "drag" ? "none" : "default";
 
     // If the expected move is chosen, continue the current line.
 
@@ -1497,7 +1980,7 @@ square.addEventListener("click", event => {
 
         to,
 
-        promotion: "q"
+        promotion
 
       });
 
@@ -1524,6 +2007,8 @@ square.addEventListener("click", event => {
     }
 
 
+
+    playMoveSound(move);
 
     const newMoves = game.history({ verbose: true });
 
@@ -1586,7 +2071,16 @@ square.addEventListener("click", event => {
 
 
     goTo(cursor);
-    if (engineMode && !game.game_over()) requestEngineMove();
+    updateEngineEndUI();
+    if (engineMode && !isCompletedPosition() && engineWorker && game.turn() === engineColor) {
+      // Give the player a brief pause after their move before Stockfish starts searching.
+      if (engineMoveTimer !== null) clearTimeout(engineMoveTimer);
+      setEngineStatus("Stockfish is preparing…");
+      engineMoveTimer = setTimeout(() => {
+        engineMoveTimer = null;
+        requestEngineMove();
+      }, ENGINE_MOVE_DELAY_MS);
+    }
 
   }
 
@@ -2159,6 +2653,10 @@ square.addEventListener("click", event => {
 
       text = "Draw — stalemate";
 
+    } else if (typeof game.in_threefold_repetition === "function" && game.in_threefold_repetition()) {
+
+      text = "Draw — threefold repetition";
+
     } else if (game.in_draw()) {
 
       text = "Draw position";
@@ -2474,31 +2972,11 @@ square.addEventListener("click", event => {
 
 
   function importPgnText(text) {
-
-    const imported = new Chess();
-
-
-
-    if (!imported.load_pgn(text)) {
-
-      notify("PGN could not be loaded. Check the file format.");
-
-      return;
-
-    }
-
-
-
     game = new Chess();
 
-
-
     if (!game.load_pgn(text)) {
-
-      notify("PGN could not be loaded.");
-
+      notify("PGN could not be loaded. Check the file format.");
       return;
-
     }
 
 
@@ -2886,6 +3364,9 @@ square.addEventListener("click", event => {
 
 
   function resetGame() {
+    engineGameEnded = false;
+    pendingPromotion = null;
+    if ($("promotionModal")) $("promotionModal").hidden = true;
     renderEvaluation(0);
     engineAnalysisOnly = false;
 
@@ -2986,18 +3467,80 @@ square.addEventListener("click", event => {
 
 
   function installEvents() {
+    const analyzeButton = $("analyzeBtn");
+    if (analyzeButton) analyzeButton.addEventListener("click", analyzeGameGraph);
 
+    // Unlock browser audio on the first genuine user interaction so that
+    // Stockfish replies can also produce sounds later in the game.
+    document.addEventListener("pointerdown", unlockChessAudio);
     const engineModal = $("engineModal");
+    const settingsModal = $("settingsModal");
+    $("settingsModalOpenBtn").addEventListener("click", () => { settingsModal.hidden = false; });
+    $("settingsModalCloseBtn").addEventListener("click", () => { settingsModal.hidden = true; });
+    settingsModal.addEventListener("click", event => { if (event.target === settingsModal) settingsModal.hidden = true; });
+    $("themeSelect").addEventListener("change", event => {
+      appearanceSettings.theme = event.target.value; applyAppearanceSettings(); saveAppearanceSettings();
+    });
+    if (window.matchMedia) {
+      const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
+      systemThemeQuery.addEventListener?.("change", () => {
+        if (appearanceSettings.theme === "system") applyAppearanceSettings();
+      });
+    }
+    $("liquidGlassToggle").addEventListener("change", event => {
+      appearanceSettings.liquidGlass = event.target.checked; applyAppearanceSettings(); saveAppearanceSettings();
+    });
+    $("glassStrength").addEventListener("input", event => {
+      appearanceSettings.glassStrength = Number(event.target.value); applyAppearanceSettings(); saveAppearanceSettings();
+    });
+    $("glassOpacity").addEventListener("input", event => {
+      appearanceSettings.glassOpacity = Number(event.target.value); applyAppearanceSettings(); saveAppearanceSettings();
+    });
+    $("pieceAnimationToggle").addEventListener("change", event => {
+      appearanceSettings.pieceAnimation = event.target.checked; saveAppearanceSettings();
+    });
+    $("pieceSetSelect").addEventListener("change", event => {
+      appearanceSettings.pieceSet = event.target.value === "classic" ? "classic" : "modern";
+      saveAppearanceSettings();
+      renderBoard();
+    });
+    $("soundToggle").addEventListener("change", event => {
+      appearanceSettings.soundEnabled = event.target.checked;
+      saveAppearanceSettings();
+      if (appearanceSettings.soundEnabled) unlockChessAudio();
+    });
+    $("backgroundFileInput").addEventListener("change", async event => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { notify("Выбери изображение JPG, PNG или WebP."); event.target.value = ""; return; }
+      try {
+        const dataUrl = await compressBackgroundImage(file);
+        appearanceSettings.background = dataUrl;
+        if (saveAppearanceSettings()) { applyAppearanceSettings(); notify("Фон успешно установлен."); }
+      } catch (error) { notify(error.message || "Не удалось установить фон."); }
+      event.target.value = "";
+    });
+    $("removeBackgroundBtn").addEventListener("click", () => {
+      appearanceSettings.background = ""; saveAppearanceSettings(); applyAppearanceSettings(); notify("Фон сброшен.");
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        settingsModal.hidden = true;
+        engineModal.hidden = true;
+      }
+    });
     $("engineModalOpenBtn").addEventListener("click", () => { engineModal.hidden = false; });
     $("engineModalCloseBtn").addEventListener("click", () => { engineModal.hidden = true; });
     engineModal.addEventListener("click", event => { if (event.target === engineModal) engineModal.hidden = true; });
     $("engineStartBtn").addEventListener("click", () => { startEngineGame(); engineModal.hidden = true; });
     $("engineUndoBtn").addEventListener("click", undoEngineTurn);
+    $("resignBtn").addEventListener("click", resignEngineGame);
 
     $("newGameBtn").addEventListener("click", () => {
       if (engineMode) {
         closeEngine();
         engineMode = false;
+        engineGameEnded = false;
         $("engineUndoBtn").disabled = true;
         setEngineStatus("Engine is off");
       }
@@ -3212,7 +3755,8 @@ square.addEventListener("click", event => {
     installStyles();
 
     installRatingFields();
-
+    readAppearanceSettings();
+    applyAppearanceSettings();
 
     installArrowControls();
 

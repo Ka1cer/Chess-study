@@ -16,10 +16,20 @@
     <button id="engineModalOpenBtn" class="btn primary">Play vs Stockfish</button>
     <button id="importBtn" class="btn ghost">Import PGN</button>
     <button id="exportBtn" class="btn ghost">Export PGN</button>
+    <button id="settingsModalOpenBtn" class="icon-btn settings-open-btn" type="button" title="Настройки" aria-label="Открыть настройки">⚙</button>
     <input id="fileInput" type="file" accept=".pgn,.txt" hidden>
   </div>
 </header>
 <main class="layout">
+  <aside class="tools-panel panel" aria-label="Инструменты">
+    <div class="section-title"><h2>Инструменты</h2></div>
+    <div class="tools-actions">
+      <button id="analyzeBtn" class="btn primary full" type="button">Анализировать</button>
+      <button id="resignBtn" class="resign-btn full" type="button" hidden>Сдаться</button>
+    </div>
+    <p class="tools-note">Дополнительные инструменты появятся здесь.</p>
+  </aside>
+
   <section class="board-panel panel">
     <div class="game-heading">
       <div><div class="eyebrow">ANALYSIS BOARD</div><h1 id="gameTitle">Untitled game</h1><p id="gameMeta">White vs Black · Casual game</p></div>
@@ -41,10 +51,12 @@
       </div>
     </div>
   </section>
+
   <aside class="moves-panel panel">
     <div class="section-title"><h2>Moves</h2><span class="subtle">English notation · SAN</span></div>
     <div id="moveList" class="move-list"><div class="empty">Moves will appear here.</div></div>
   </aside>
+
   <section class="details-panel panel">
     <div class="section-title"><h2>Game details</h2><span class="subtle">Edit metadata</span></div>
     <div class="details-grid">
@@ -56,6 +68,7 @@
       <div class="save-field"><button id="saveBtn" class="btn primary full">Save to my database</button><div class="small-note">Games are stored in this browser on this device (localStorage).</div></div>
     </div>
   </section>
+
   <section class="database-panel panel">
     <div class="section-title"><h2>My games</h2><span class="subtle" id="gameCount">0 saved</span></div>
     <div class="db-tools"><input id="searchInput" placeholder="Search players, event, notes…"><button id="backupBtn" class="btn ghost compact">Backup</button><input id="backupInput" type="file" accept=".json" hidden></div>
@@ -70,6 +83,35 @@
     <div class="engine-modal-status" id="engineStatus">Engine is off</div>
     <div class="engine-actions"><button id="engineStartBtn" class="btn primary">Start game</button><button id="engineUndoBtn" class="btn ghost" disabled>Undo turn</button></div>
     <p class="engine-note">Stockfish files must be beside index.html.</p>
+  </section>
+</div>
+<div id="settingsModal" class="modal-backdrop" hidden>
+  <section class="settings-dialog panel" role="dialog" aria-modal="true" aria-labelledby="settingsDialogTitle">
+    <div class="section-title"><h2 id="settingsDialogTitle">Настройки</h2><button id="settingsModalCloseBtn" class="icon-btn" type="button" aria-label="Закрыть">×</button></div>
+    <div class="settings-content">
+      <section class="settings-group">
+        <div class="settings-group-heading"><span class="settings-group-icon">✧</span><div><h3>Оформление</h3><p>Настрой внешний вид интерфейса</p></div></div>
+        <label class="setting-select-row" for="themeSelect"><span><strong>Тема интерфейса</strong><small>Выбери оформление приложения</small></span><select id="themeSelect"><option value="system">Системная</option><option value="dark">Тёмная</option><option value="light">Светлая</option></select></label>
+        <label class="setting-switch-row" for="liquidGlassToggle"><span><strong>Liquid Glass</strong><small>Полупрозрачные панели, размытие и блики</small></span><input id="liquidGlassToggle" class="setting-switch" type="checkbox"></label>
+        <label class="setting-range-row" for="glassStrength"><span><strong>Интенсивность стекла</strong><output id="glassStrengthValue">65%</output></span><input id="glassStrength" type="range" min="20" max="100" value="65"></label>
+        <label class="setting-range-row" for="glassOpacity"><span><strong>Прозрачность стекла</strong><output id="glassOpacityValue">65%</output></span><input id="glassOpacity" type="range" min="0" max="100" value="65"></label>
+      </section>
+      <section class="settings-group">
+        <div class="settings-group-heading"><span class="settings-group-icon">▧</span><div><h3>Фон приложения</h3><p>Используй собственное изображение</p></div></div>
+        <div class="background-actions"><label class="btn ghost upload-background-btn" for="backgroundFileInput">Загрузить изображение</label><button id="removeBackgroundBtn" class="btn ghost" type="button">Сбросить фон</button><input id="backgroundFileInput" type="file" accept="image/png,image/jpeg,image/webp" hidden></div>
+        <p id="backgroundStatus" class="setting-hint">Поддерживаются JPG, PNG и WebP. Изображение будет сохранено в этом браузере.</p>
+      </section>
+      <section class="settings-group">
+        <div class="settings-group-heading"><span class="settings-group-icon">♞</span><div><h3>Шахматная доска</h3><p>Настрой внешний вид и движение фигур</p></div></div>
+        <label class="setting-select-row" for="pieceSetSelect"><span><strong>Набор фигур</strong><small>Выбери классические символы или текущие изображения</small></span><select id="pieceSetSelect"><option value="modern">Текущий набор</option><option value="classic">Первый набор</option></select></label>
+        <label class="setting-switch-row" for="pieceAnimationToggle"><span><strong>Плавная анимация фигур</strong><small>Фигуры перемещаются между клетками</small></span><input id="pieceAnimationToggle" class="setting-switch" type="checkbox" checked></label>
+      </section>
+      <section class="settings-group">
+        <div class="settings-group-heading"><span class="settings-group-icon">♫</span><div><h3>Звуки</h3><p>Звуковые эффекты во время партии</p></div></div>
+        <label class="setting-switch-row" for="soundToggle"><span><strong>Звук</strong><small>Ходы, взятия, рокировка, шах и мат</small></span><input id="soundToggle" class="setting-switch" type="checkbox" checked></label>
+      </section>
+      <div class="settings-footer-note">Настройки сохраняются автоматически на этом устройстве.</div>
+    </div>
   </section>
 </div>
 <div id="toast" class="toast" role="status"></div>

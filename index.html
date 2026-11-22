@@ -66,6 +66,13 @@
   <aside class="moves-panel panel">
     <div class="section-title"><h2>Moves</h2><span class="subtle">English notation · SAN</span></div>
     <div id="moveList" class="move-list"><div class="empty">Moves will appear here.</div></div>
+    <section class="party-comments panel" aria-labelledby="partyCommentsTitle">
+      <div class="party-comments-heading">
+        <h3 id="partyCommentsTitle"><span aria-hidden="true">▤</span> Комментарии к партии</h3>
+        <button id="partyCommentsEditBtn" class="icon-btn party-comments-edit" type="button" title="Открыть Game Details" aria-label="Редактировать комментарии">↗</button>
+      </div>
+      <div id="partyCommentsText" class="party-comments-text" tabindex="0">Комментариев пока нет.</div>
+    </section>
   </aside>
 
   <div id="detailsModal" class="modal-backdrop" hidden>

@@ -1989,412 +1989,219 @@ square.addEventListener("click", event => {
 
 
   function buildPgn() {
-
     const m = metaFromInputs();
-
-
-
-    const date = m.date
-
-      ? m.date.replaceAll("-", ".")
-
-      : "????.??.??";
-
-
-
+    const date = m.date ? m.date.replaceAll("-", ".") : "????.??.??";
     const headers = [
-
-      ["Event", m.event],
-
-      ["Site", "?"],
-
-      ["Date", date],
-
-      ["Round", "?"],
-
-      ["White", m.white],
-
-      ["Black", m.black],
-
-      ["Result", gameResult()]
-
+      ["Event", m.event], ["Site", "?"], ["Date", date], ["Round", "?"],
+      ["White", m.white], ["Black", m.black], ["Result", gameResult()]
     ];
-
-
-
     if (m.whiteElo) headers.push(["WhiteElo", m.whiteElo]);
-
     if (m.blackElo) headers.push(["BlackElo", m.blackElo]);
 
-
-
     const headerText = headers.map(([key, value]) => {
-
-      const safeValue = String(value).replaceAll("\\\\", "\\\\\\\\")
-
-        .replaceAll('"', '\\\\"');
-
-
-
-      return `[${key} "${safeValue}"]`;
-
+      const safeValue = String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+      return "[" + key + ' "' + safeValue + '"]';
     }).join("\n");
 
-
-
-    // Turn all stored lines into a move tree.
-
-    const root = { move: null, children: [] };
-
-
-
-    for (const line of lines) {
-
-      let parent = root;
-
-
-
-      for (const move of line.moves) {
-
-        let node = parent.children.find(child =>
-
-          sameMove(child.move, move)
-
-        );
-
-
-
-        if (!node) {
-
-          node = { move, children: [] };
-
-          parent.children.push(node);
-
-        }
-
-
-
-        parent = node;
-
-      }
-
-    }
-
-
-
-    function token(move, ply, forceNumber) {
-
-      const number = Math.ceil(ply / 2);
-
-
-
-      if (move.color === "w") {
-
-        return `${number}. ${move.san}`;
-
-      }
-
-
-
-      return forceNumber ? `${number}... ${move.san}` : move.san;
-
-    }
-
-
+    const formatMove = (move, ply, forceNumber) => {
+      const number = Math.floor((ply - 1) / 2) + 1;
+      if (move.color === "w") return number + ". " + move.san;
+      return forceNumber ? number + "... " + move.san : move.san;
+    };
 
     function emit(parent, ply) {
-
       if (!parent.children.length) return "";
-
-
-
       const main = parent.children[0];
-
-      let text = token(main.move, ply, false);
-
-
-
-      for (const alt of parent.children.slice(1)) {
-
-        const variation =
-
-          token(alt.move, ply, true) + emit(alt, ply + 1);
-
-
-
-        text += ` (${variation.trim()})`;
-
+      let output = formatMove(main.move, ply, false);
+      for (const alternative of parent.children.slice(1)) {
+        const variation = formatMove(alternative.move, ply, true) + emit(alternative, ply + 1);
+        output += " (" + variation.trim() + ")";
       }
-
-
-
       const continuation = emit(main, ply + 1);
-
-
-
-      if (continuation) text += " " + continuation;
-
-
-
-      return text;
-
+      if (continuation) output += " " + continuation;
+      return output;
     }
 
-
-
-    return headerText + "\n\n" + emit(root, 1).trim() +
-
-      " " + gameResult();
-
+    return headerText + "\n\n" + emit(moveTree.root, 1).trim() + " " + gameResult();
   }
 
+    function parsePgnToTree(pgnText) {
+    const headers = {};
+    const headerPattern = /^\s*\[([A-Za-z0-9_]+)\s+"((?:\\.|[^"])*)"\]\s*$/gm;
+    let body = String(pgnText || "").replace(headerPattern, (_, key, value) => {
+      headers[key] = value.replace(/\\(["\\])/g, "$1");
+      return " ";
+    });
+    body = body.replace(/\{[\s\S]*?\}/g, " ").replace(/;[^\r\n]*/g, " ");
+    const tokens = body.match(/\(|\)|[^\s]+/g) || [];
+    const tree = new window.ChessStudyMoveTree();
+    let node = tree.root;
+    let parser = new Chess();
+    const stack = [];
 
+    const restorePosition = target => {
+      parser = new Chess();
+      for (const move of tree.getPath(target)) {
+        const restored = parser.move({
+          from: move.from, to: move.to, promotion: move.promotion || "q"
+        });
+        if (!restored) throw new Error("Не удалось восстановить позицию при разборе PGN");
+      }
+    };
+
+    for (const raw of tokens) {
+      if (raw === "(") {
+        if (!node || node === tree.root || !node.parent) throw new Error("Некорректное начало варианта PGN");
+        stack.push(node);
+        node = node.parent;
+        restorePosition(node);
+        continue;
+      }
+
+      if (raw === ")") {
+        if (!stack.length) throw new Error("Лишняя закрывающая скобка в PGN");
+        node = stack.pop();
+        restorePosition(node);
+        continue;
+      }
+
+      let san = raw.replace(/^\d+\.(?:\.\.)?/, "");
+      if (!san || /^\$\d+$/.test(san) ||
+          /^(1-0|0-1|1\/2-1\/2|\*)$/.test(san)) continue;
+      if (/^(e\.p\.|!?|\?+|!+)$/.test(san)) continue;
+      san = san.replace(/[!?]+$/, "");
+
+      let move = null;
+      try { move = parser.move(san, { sloppy: true }); } catch {}
+      if (!move && /[+#]$/.test(san)) {
+        try { move = parser.move(san.replace(/[+#]+$/, ""), { sloppy: true }); } catch {}
+      }
+      if (!move) throw new Error("Не удалось распознать ход PGN: " + san);
+
+      const recorded = tree.addMove(node, move);
+      node = recorded.node;
+    }
+
+    if (stack.length) throw new Error("Не закрыты скобки варианта в PGN");
+    return { tree, headers };
+  }
 
   function importPgnText(text) {
-    game = new Chess();
-
-    if (!game.load_pgn(text)) {
-      notify("PGN could not be loaded. Check the file format.");
+    let parsed;
+    try {
+      parsed = parsePgnToTree(text);
+    } catch (error) {
+      console.error("PGN import error:", error);
+      notify(error.message || "PGN could not be loaded. Check the file format.");
       return;
     }
 
-
-
-    history = game.history({ verbose: true });
-
-
-
-    lines = [{
-
-      id: "main",
-
-      name: "Основная линия",
-
-      moves: history
-
-    }];
-
-
-
-    currentLineId = "main";
-
-    variationNumber = 1;
-
+    moveTree = parsed.tree;
+    activeLeaf = moveTree.mainLeafFrom(moveTree.root);
+    currentNode = activeLeaf;
+    history = moveTree.getPath(activeLeaf);
     cursor = history.length;
-
+    branchCreationMode = false;
     currentId = null;
-
     arrows = [];
 
-
-
-    const h = game.header();
-
-    const validDate =
-
-      h.Date && /^\d{4}\.\d{2}\.\d{2}$/.test(h.Date);
-
-
-
+    const h = parsed.headers;
+    const validDate = h.Date && /^\d{4}\.\d{2}\.\d{2}$/.test(h.Date);
     loadMeta({
-
       white: h.White || "White",
-
       black: h.Black || "Black",
-
       whiteElo: h.WhiteElo || "",
-
       blackElo: h.BlackElo || "",
-
       event: h.Event || "Imported game",
-
       date: validDate ? h.Date.replaceAll(".", "-") : "",
-
       notes: ""
-
     });
 
-
-
     goTo(history.length);
-
-    notify("PGN imported");
-
+    notify("PGN imported with variations");
   }
 
-
-
-  // ---------- Save / load / database ----------
+    // ---------- Save / load / database ----------
 
 
 
   function saveGame() {
-
     const m = metaFromInputs();
-
     const games = readGames();
-
-
-
+    const flattened = moveTree.toLines();
     const item = {
-
-      id: currentId ||
-
-        ("g" + Date.now() + Math.random().toString(16).slice(2, 7)),
-
+      id: currentId || ("g" + Date.now() + Math.random().toString(16).slice(2, 7)),
       ...m,
-
       pgn: buildPgn(),
-
-      lines: lines.map(line => ({
-
-        id: line.id,
-
-        name: line.name,
-
-        moves: line.moves.map(move => ({ ...move }))
-
+      moveTree: moveTree.serialize(),
+      activePath: moveTree.getPath(activeLeaf),
+      activeCursor: cursor,
+      lines: flattened.map((moves, index) => ({
+        id: index === 0 ? "main" : "variation-" + index,
+        name: index === 0 ? "Основная линия" : "Вариант " + index,
+        moves: moves.map(move => ({ ...move }))
       })),
-
-      activeLineId: currentLineId,
-
+      activeLineId: "main",
       updatedAt: new Date().toISOString(),
-
       plies: history.length
-
     };
 
-
-
     const idx = games.findIndex(g => g.id === item.id);
-
-
-
     if (idx >= 0) games[idx] = item;
-
     else games.unshift(item);
 
-
-
     writeGames(games);
-
     currentId = item.id;
-
     renderSavedGames();
-
     notify("Game and variations saved");
-
   }
 
-
-
-  function openSaved(id) {
-
+    function openSaved(id) {
     const item = readGames().find(g => g.id === id);
-
     if (!item) return;
 
-
-
-    const temp = new Chess();
-
-
-
-    if (!temp.load_pgn(item.pgn)) {
-
-      notify("Could not read this PGN");
-
-      return;
-
+    let parsedPgn = null;
+    if (item.pgn) {
+      try { parsedPgn = parsePgnToTree(item.pgn); }
+      catch (error) { console.warn("Saved PGN tree parse failed:", error); }
     }
 
-
-
-    if (Array.isArray(item.lines) && item.lines.length) {
-
-      lines = item.lines.map(line => ({
-
-        id: line.id,
-
-        name: line.name,
-
-        moves: line.moves.map(move => ({ ...move }))
-
-      }));
-
-
-
-      if (!lines.some(line => line.id === "main")) {
-
-        lines.unshift({
-
-          id: "main",
-
-          name: "Основная линия",
-
-          moves: []
-
-        });
-
-      }
-
-
-
-      currentLineId = lines.some(line => line.id === item.activeLineId)
-
-        ? item.activeLineId
-
-        : "main";
-
-
-
-      variationNumber =
-
-        lines.filter(line => line.id !== "main").length + 1;
-
+    if (item.moveTree) {
+      moveTree = window.ChessStudyMoveTree.fromSerialized(item.moveTree);
+    } else if (Array.isArray(item.lines) && item.lines.length) {
+      moveTree = window.ChessStudyMoveTree.fromLegacyLines(item.lines);
+    } else if (parsedPgn) {
+      moveTree = parsedPgn.tree;
     } else {
-
-      // Compatibility with games saved by the original version.
-
-      lines = [{
-
-        id: "main",
-
-        name: "Основная линия",
-
-        moves: temp.history({ verbose: true })
-
-      }];
-
-
-
-      currentLineId = "main";
-
-      variationNumber = 1;
-
+      const temp = new Chess();
+      if (!temp.load_pgn(item.pgn || "")) {
+        notify("Could not read this PGN");
+        return;
+      }
+      moveTree = new window.ChessStudyMoveTree(temp.history({ verbose: true }));
     }
 
+    let restoredNode = null;
+    if (Array.isArray(item.activePath)) restoredNode = moveTree.atPath(item.activePath);
+    if (!restoredNode && Array.isArray(item.lines) && item.activeLineId) {
+      const oldLine = item.lines.find(line => line.id === item.activeLineId);
+      if (oldLine) restoredNode = moveTree.atPath(oldLine.moves || []);
+    }
 
-
-    history = getLine().moves;
-
+    activeLeaf = moveTree.mainLeafFrom(restoredNode || moveTree.root);
+    currentNode = activeLeaf;
+    history = moveTree.getPath(activeLeaf);
+    cursor = Math.max(0, Math.min(Number(item.activeCursor ?? history.length), history.length));
+    branchCreationMode = false;
     currentId = item.id;
-
     arrows = [];
 
-
-
     loadMeta(item);
-
-    goTo(history.length);
-
+    goTo(cursor);
     notify("Game loaded");
-
   }
 
-
-
-  function renderSavedGames() {
+    function renderSavedGames() {
 
     const games = readGames();
 
@@ -2554,23 +2361,12 @@ square.addEventListener("click", event => {
 
 
 
-    lines = [{
-
-      id: "main",
-
-      name: "Основная линия",
-
-      moves: []
-
-    }];
-
-
-
-    currentLineId = "main";
-
+    moveTree = new window.ChessStudyMoveTree();
+    activeLeaf = moveTree.root;
+    currentNode = moveTree.root;
     history = [];
-
     cursor = 0;
+    branchCreationMode = false;
 
 
 
@@ -2581,10 +2377,6 @@ square.addEventListener("click", event => {
     currentId = null;
 
     arrows = [];
-
-    variationNumber = 1;
-
-
 
     loadMeta({
 

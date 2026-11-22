@@ -616,3 +616,95 @@ body.liquid-glass .games-dialog {
   .my-games-nav-btn { min-height: 34px; padding: 7px 11px; font-size: 12px; }
   .games-dialog { padding: 13px; width: 96vw; }
 }
+
+
+/* v3.2.5 — readable move tree, centered My games dialog, refined spacing */
+#moveList.move-tree-list {
+  display: block;
+  padding: 14px 12px;
+  overflow: auto;
+  color: var(--text);
+  line-height: 1.8;
+  font-size: 14px;
+}
+.analysis-tree,
+.analysis-tree-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 4px;
+  min-width: 0;
+}
+.analysis-tree-move {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent !important;
+  color: var(--text) !important;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.analysis-tree-move:hover {
+  background: rgba(255,255,255,.09) !important;
+  border-color: var(--line);
+}
+.analysis-tree-move.active {
+  background: var(--green) !important;
+  border-color: var(--green);
+  color: #14200e !important;
+}
+.analysis-tree-variation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex-basis: 100%;
+  margin: 3px 0 3px 15px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--green);
+  border-radius: 0 7px 7px 0;
+  background: rgba(255,255,255,.035);
+}
+.analysis-tree-branch-label {
+  color: var(--green2);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-right: 3px;
+}
+.analysis-view-exit { margin-left: auto; }
+
+#myGamesOpenBtn.my-games-nav-btn {
+  min-height: 40px;
+  padding: 9px 13px;
+  font-size: 13px;
+  font-weight: 750;
+}
+.games-modal {
+  display: grid;
+  place-items: start center;
+  padding: clamp(28px, 7vh, 76px) 18px 18px;
+  overflow-y: auto;
+}
+.games-dialog {
+  margin: 0 auto;
+  width: min(760px, 94vw);
+  max-height: min(78vh, 720px);
+}
+.board-panel .player-row { margin-bottom: 13px; }
+.board-panel .board-column .player-row + .board-workspace { margin-top: 8px; }
+@media(max-width:900px) {
+  #moveList.move-tree-list { padding: 10px; }
+  .games-modal { padding-top: 24px; }
+  .games-dialog { max-height: 84vh; }
+}

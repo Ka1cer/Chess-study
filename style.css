@@ -541,3 +541,78 @@ body.liquid-glass .board-panel::before,
 body.light-theme.liquid-glass .board-panel::before {
   display: none !important;
 }
+
+
+/* v3.2.4 — My games header button and floating library dialog */
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+.my-games-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255,255,255,.17);
+  border-radius: 9px;
+  color: var(--text);
+  background: rgba(255,255,255,.09);
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+  transition: background .16s, border-color .16s, transform .16s;
+}
+.my-games-nav-btn:hover {
+  background: rgba(255,255,255,.16);
+  border-color: rgba(255,255,255,.28);
+}
+.my-games-nav-btn:active { transform: translateY(1px); }
+body.liquid-glass .my-games-nav-btn {
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.18);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.games-modal {
+  z-index: 25;
+  background: rgba(5,9,15,.62);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+}
+.games-dialog {
+  width: min(720px, 94vw);
+  max-height: min(82vh, 760px);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 22px 80px rgba(0,0,0,.42);
+}
+.games-dialog .section-title { flex: 0 0 auto; }
+.games-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.games-dialog .db-tools { flex: 0 0 auto; }
+.games-dialog .saved-games {
+  max-height: none;
+  min-height: 100px;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding-right: 3px;
+}
+body.liquid-glass .games-dialog {
+  background: rgba(30,36,44,var(--glass-alpha));
+  border-color: rgba(255,255,255,.17);
+  -webkit-backdrop-filter: blur(var(--glass-blur,22px)) saturate(145%);
+  backdrop-filter: blur(var(--glass-blur,22px)) saturate(145%);
+}
+@media(max-width:600px) {
+  .brand-group { width: 100%; justify-content: space-between; gap: 10px; }
+  .my-games-nav-btn { min-height: 34px; padding: 7px 11px; font-size: 12px; }
+  .games-dialog { padding: 13px; width: 96vw; }
+}

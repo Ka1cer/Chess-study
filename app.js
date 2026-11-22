@@ -53,6 +53,7 @@
   let history = [];
   let cursor = 0;
   let branchCreationMode = false;
+  let analysisViewMode = false;
 
 
 
@@ -974,6 +975,8 @@
   function goToMoveNode(node) {
     if (!node || !moveTree.isAncestor(moveTree.root, node)) return;
     setActiveLeafFromNode(node);
+    // Keep the full selected continuation available, but show the exact node
+    // the user clicked rather than jumping to the end of that continuation.
     goTo(moveTree.getNodePath(node).length);
   }
 
@@ -2315,6 +2318,58 @@ square.addEventListener("click", event => {
     list.innerHTML = "";
     list.classList.add("move-tree-list");
 
+    if (analysisViewMode) {
+      const exitButton = document.createElement("button");
+      exitButton.type = "button";
+      exitButton.className = "analysis-view-exit";
+      exitButton.textContent = "← Обычный список ходов";
+      exitButton.addEventListener("click", () => {
+        analysisViewMode = false;
+        renderMoves();
+      });
+      tools.appendChild(exitButton);
+
+      if (!moveTree.root.children.length) {
+        list.innerHTML = '<div class="empty">В партии пока нет ходов.</div>';
+        return;
+      }
+
+      const treeRoot = document.createElement("div");
+      treeRoot.className = "analysis-tree";
+      const renderBranch = (parent, ply, container) => {
+        parent.children.forEach((node, index) => {
+          const row = document.createElement("div");
+          row.className = "analysis-tree-row" + (index > 0 ? " is-variation" : " is-main");
+          const number = Math.floor((ply - 1) / 2) + 1;
+          const prefix = node.move.color === "w" ? number + "." : (index > 0 || ply === 1 ? number + "..." : "");
+          const moveButton = document.createElement("button");
+          moveButton.type = "button";
+          moveButton.className = "analysis-tree-move";
+          moveButton.classList.toggle("active", currentNode === node);
+          moveButton.dataset.nodeId = node.id;
+          moveButton.textContent = (prefix ? prefix + " " : "") + node.move.san;
+          moveButton.addEventListener("click", () => goToMoveNode(node));
+          const kind = document.createElement("span");
+          kind.className = "analysis-tree-kind";
+          kind.textContent = index === 0 ? "Основное" : "Вариант";
+          row.append(moveButton, kind);
+          container.appendChild(row);
+
+          if (node.children.length) {
+            const nested = document.createElement("div");
+            nested.className = "analysis-tree-children";
+            renderBranch(node, ply + 1, nested);
+            container.appendChild(nested);
+          }
+        });
+      };
+      renderBranch(moveTree.root, 1, treeRoot);
+      list.appendChild(treeRoot);
+      const active = list.querySelector(".analysis-tree-move.active");
+      if (active) active.scrollIntoView({ block: "nearest" });
+      return;
+    }
+
     if (!moveTree.root.children.length) {
       list.innerHTML = '<div class="empty">Moves will appear here.</div>';
       return;
@@ -2676,6 +2731,8 @@ square.addEventListener("click", event => {
     history = moveTree.getPath(activeLeaf);
     cursor = history.length;
     branchCreationMode = false;
+    analysisViewMode = false;
+    const analyzeButton = $("analyzeBtn"); if (analyzeButton) analyzeButton.textContent = "Анализировать";
     currentId = null;
     arrows = [];
 
@@ -3012,7 +3069,12 @@ square.addEventListener("click", event => {
 
   function installEvents() {
     const analyzeButton = $("analyzeBtn");
-    if (analyzeButton) analyzeButton.addEventListener("click", analyzeGameGraph);
+    if (analyzeButton) analyzeButton.addEventListener("click", () => {
+      analysisViewMode = !analysisViewMode;
+      analyzeButton.textContent = analysisViewMode ? "Обычные ходы" : "Анализировать";
+      renderMoves();
+      if (analysisViewMode) analyzeGameGraph();
+    });
 
     // Unlock browser audio on the first genuine user interaction so that
     // Stockfish replies can also produce sounds later in the game.

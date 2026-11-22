@@ -898,9 +898,20 @@
 
 
 
+  function renderPartyComments() {
+    const output = $("partyCommentsText");
+    const input = $("notesInput");
+    if (!output || !input) return;
+    const notes = input.value.trim();
+    output.textContent = notes || "Комментариев пока нет.";
+    output.classList.toggle("is-empty", !notes);
+  }
+
+
   function updateHeading() {
 
     const m = metaFromInputs();
+    renderPartyComments();
 
 
 
@@ -3119,6 +3130,7 @@ square.addEventListener("click", event => {
     $("settingsModalCloseBtn").addEventListener("click", () => { settingsModal.hidden = true; });
     settingsModal.addEventListener("click", event => { if (event.target === settingsModal) settingsModal.hidden = true; });
     $("detailsModalOpenBtn").addEventListener("click", () => { detailsModal.hidden = false; $("whiteInput").focus(); });
+    $("partyCommentsEditBtn").addEventListener("click", () => { detailsModal.hidden = false; $("notesInput").focus(); });
     $("detailsModalCloseBtn").addEventListener("click", () => { detailsModal.hidden = true; });
     detailsModal.addEventListener("click", event => { if (event.target === detailsModal) detailsModal.hidden = true; });
     $("themeSelect").addEventListener("change", event => {

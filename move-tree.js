@@ -1,83 +1,67 @@
-/* Chess Study — hierarchical move tree (v3.2 development)
- * This module is introduced separately so the existing game UI stays untouched
- * while the move-widget integration is tested.
- */
+/* Chess Study — hierarchical move tree (v3.2 development). */
 (function (global) {
   "use strict";
 
-  const cloneMove = move => move ? {
-    color: move.color,
-    from: move.from,
-    to: move.to,
-    san: move.san,
-    piece: move.piece,
-    captured: move.captured,
-    promotion: move.promotion,
-    flags: move.flags,
-    lan: move.lan,
-    before: move.before,
-    after: move.after
-  } : null;
-
+  const copyMove = move => move ? { ...move } : null;
   const sameMove = (a, b) => Boolean(a && b) &&
     a.from === b.from && a.to === b.to &&
     (a.promotion || "") === (b.promotion || "");
 
   function makeNode(move, parent) {
     return {
-      id: "node-" + Math.random().toString(36).slice(2) + Date.now().toString(36),
-      move: cloneMove(move),
+      id: "node-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9),
+      move: copyMove(move),
       parent: parent || null,
       children: []
     };
   }
 
   class MoveTree {
-    constructor(moves) {
+    constructor(mainMoves) {
       this.root = makeNode(null, null);
       this.current = this.root;
-      if (Array.isArray(moves)) this.appendMainLine(moves);
+      if (Array.isArray(mainMoves) && mainMoves.length) this.appendLine(mainMoves);
     }
 
-    appendMainLine(moves) {
-      let parent = this.root;
-      for (const move of moves) {
-        let node = parent.children.find(child => sameMove(child.move, move));
-        if (!node) {
-          node = makeNode(move, parent);
-          parent.children.unshift(node);
-        }
-        parent = node;
-      }
-      return parent;
-    }
-
-    getPath(node) {
+    getNodePath(node) {
       const path = [];
       let cursor = node || this.current;
       while (cursor && cursor !== this.root) {
-        path.push(cloneMove(cursor.move));
+        path.push(cursor);
         cursor = cursor.parent;
       }
       return path.reverse();
     }
 
-    getMainChild(node) {
-      return node && node.children.length ? node.children[0] : null;
+    getPath(node) {
+      return this.getNodePath(node).map(item => copyMove(item.move));
     }
 
     findChild(parent, move) {
       return parent.children.find(child => sameMove(child.move, move)) || null;
     }
 
-    addMove(move, options) {
-      const parent = this.current;
+    appendLine(moves) {
+      let parent = this.root;
+      for (const move of moves || []) {
+        let node = this.findChild(parent, move);
+        if (!node) {
+          node = makeNode(move, parent);
+          parent.children.push(node);
+        }
+        parent = node;
+      }
+      this.current = parent;
+      return parent;
+    }
+
+    addMove(parent, move, options) {
+      parent = parent || this.current || this.root;
       const existing = this.findChild(parent, move);
       if (existing) {
         this.current = existing;
         return { node: existing, created: false };
       }
-
       const node = makeNode(move, parent);
       const asMain = Boolean(options && options.asMain);
       if (asMain) parent.children.unshift(node);
@@ -86,37 +70,39 @@
       return { node, created: true };
     }
 
-    select(node) {
-      if (!node || !this.isInTree(node)) return false;
-      this.current = node;
-      return true;
+    mainLeafFrom(node) {
+      let cursor = node || this.root;
+      while (cursor.children.length) cursor = cursor.children[0];
+      return cursor;
     }
 
-    isInTree(node) {
-      let cursor = node;
-      while (cursor && cursor !== this.root) cursor = cursor.parent;
-      return cursor === this.root;
-    }
-
-    atPath(path) {
+    atPath(moves) {
       let node = this.root;
-      for (const move of path || []) {
+      for (const move of moves || []) {
         node = this.findChild(node, move);
         if (!node) return null;
       }
       return node;
     }
 
-    addVariationAtCurrent(move) {
-      const result = this.addMove(move, { asMain: false });
-      return result;
+    findNode(id) {
+      if (!id) return null;
+      const visit = node => {
+        if (node.id === id) return node;
+        for (const child of node.children) {
+          const found = visit(child);
+          if (found) return found;
+        }
+        return null;
+      };
+      return visit(this.root);
     }
 
     promoteToMain(node) {
       if (!node || node === this.root || !node.parent) return false;
       const siblings = node.parent.children;
       const index = siblings.indexOf(node);
-      if (index < 0) return false;
+      if (index <= 0) return false;
       siblings.splice(index, 1);
       siblings.unshift(node);
       return true;
@@ -141,27 +127,30 @@
       return false;
     }
 
+    firstAlternativeOnPath(node) {
+      for (const item of this.getNodePath(node)) {
+        if (item.parent && item.parent.children.indexOf(item) > 0) return item;
+      }
+      return null;
+    }
+
     toLines() {
       const lines = [];
-      const visit = (node, path, branchPath) => {
+      const visit = (node, path) => {
         if (!node.children.length) {
-          if (path.length) lines.push({ moves: path.map(cloneMove), branchPath: branchPath.slice() });
+          if (path.length) lines.push(path.map(copyMove));
           return;
         }
-        node.children.forEach((child, index) => {
-          const nextPath = path.concat([child.move]);
-          const nextBranches = index === 0 ? branchPath : branchPath.concat([child.id]);
-          visit(child, nextPath, nextBranches);
-        });
+        node.children.forEach(child => visit(child, path.concat([child.move])));
       };
-      visit(this.root, [], []);
+      visit(this.root, []);
       return lines;
     }
 
     serialize() {
       const encode = node => ({
         id: node.id,
-        move: cloneMove(node.move),
+        move: copyMove(node.move),
         children: node.children.map(encode)
       });
       return encode(this.root);
@@ -179,6 +168,16 @@
         return node;
       };
       tree.root.children = data.children.map(child => decode(child, tree.root));
+      return tree;
+    }
+
+    static fromLegacyLines(lines) {
+      const tree = new MoveTree();
+      const ordered = (lines || []).slice().sort((a, b) =>
+        (a.id === "main" ? -1 : 0) - (b.id === "main" ? -1 : 0)
+      );
+      ordered.forEach(line => tree.appendLine(line.moves || []));
+      tree.current = tree.root;
       return tree;
     }
   }

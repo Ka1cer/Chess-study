@@ -3090,6 +3090,7 @@ square.addEventListener("click", event => {
     document.addEventListener("pointerdown", unlockChessAudio);
     const engineModal = $("engineModal");
     const settingsModal = $("settingsModal");
+    const detailsModal = $("detailsModal");
     const gamesModal = $("gamesModal");
     const gamesButton = $("myGamesOpenBtn");
     const closeGamesPopover = () => {
@@ -3112,6 +3113,9 @@ square.addEventListener("click", event => {
     $("settingsModalOpenBtn").addEventListener("click", () => { settingsModal.hidden = false; });
     $("settingsModalCloseBtn").addEventListener("click", () => { settingsModal.hidden = true; });
     settingsModal.addEventListener("click", event => { if (event.target === settingsModal) settingsModal.hidden = true; });
+    $("detailsModalOpenBtn").addEventListener("click", () => { detailsModal.hidden = false; $("whiteInput").focus(); });
+    $("detailsModalCloseBtn").addEventListener("click", () => { detailsModal.hidden = true; });
+    detailsModal.addEventListener("click", event => { if (event.target === detailsModal) detailsModal.hidden = true; });
     $("themeSelect").addEventListener("change", event => {
       appearanceSettings.theme = event.target.value; applyAppearanceSettings(); saveAppearanceSettings();
     });
@@ -3161,6 +3165,7 @@ square.addEventListener("click", event => {
       if (event.key === "Escape") {
         settingsModal.hidden = true;
         engineModal.hidden = true;
+        detailsModal.hidden = true;
         if (gamesModal) gamesModal.hidden = true;
       }
     });

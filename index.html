@@ -36,13 +36,13 @@
     <div class="tools-actions">
       <button id="analyzeBtn" class="btn primary full" type="button">Анализировать</button>
       <button id="detailsModalOpenBtn" class="btn ghost full" type="button">Game Details</button>
+      <button id="flipBtn" class="btn ghost full" type="button" title="Перевернуть доску" aria-label="Перевернуть доску">⇅ Перевернуть доску</button>
       <button id="resignBtn" class="resign-btn full" type="button" hidden>Сдаться</button>
     </div>
     <p class="tools-note">Дополнительные инструменты появятся здесь.</p>
   </aside>
 
   <section class="board-panel panel">
-    <button id="flipBtn" class="icon-btn board-flip-control" title="Flip board" aria-label="Flip board">⇅</button>
     <div class="board-workspace">
       <div class="evaluation-wrap" aria-label="Stockfish evaluation">
         <div class="evaluation-bar" id="evaluationBar"><div class="eval-black" id="evalBlack"></div><div class="eval-white" id="evalWhite"></div><div class="eval-center"></div></div>
@@ -59,7 +59,7 @@
       </div>
     </div>
     <div class="game-heading">
-      <div><div class="eyebrow">ANALYSIS BOARD</div><h1 id="gameTitle">Untitled game</h1><p id="gameMeta">White vs Black · Casual game</p></div>
+      <div><div class="eyebrow">ДЕТАЛИ ПАРТИИ</div><h1 id="gameTitle">Untitled game</h1><p id="gameMeta">White vs Black · Casual game</p></div>
     </div>
   </section>
 

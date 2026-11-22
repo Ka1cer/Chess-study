@@ -128,10 +128,11 @@
     }
 
     firstAlternativeOnPath(node) {
+      let selected = null;
       for (const item of this.getNodePath(node)) {
-        if (item.parent && item.parent.children.indexOf(item) > 0) return item;
+        if (item.parent && item.parent.children.indexOf(item) > 0) selected = item;
       }
-      return null;
+      return selected;
     }
 
     toLines() {

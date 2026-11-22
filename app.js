@@ -2058,6 +2058,7 @@ square.addEventListener("click", event => {
       return " ";
     });
     body = body.replace(/\{[\s\S]*?\}/g, " ").replace(/;[^\r\n]*/g, " ");
+    body = body.replace(/\(/g, " ( ").replace(/\)/g, " ) ");
     const tokens = body.match(/\(|\)|[^\s]+/g) || [];
     const tree = new window.ChessStudyMoveTree();
     let node = tree.root;

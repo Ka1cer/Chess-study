@@ -2352,7 +2352,10 @@ square.addEventListener("click", event => {
         group.className = "move-variation";
         group.appendChild(document.createTextNode("("));
         appendMove(group, alternative, ply, true);
-        renderSequence(alternative, ply + 1, group);
+        if (alternative.children.length) {
+          group.appendChild(document.createTextNode(" "));
+          renderSequence(alternative, ply + 1, group);
+        }
         group.appendChild(document.createTextNode(")"));
         target.appendChild(group);
       });
@@ -2583,8 +2586,10 @@ square.addEventListener("click", event => {
       const main = parent.children[0];
       let output = formatMove(main.move, ply, false);
       for (const alternative of parent.children.slice(1)) {
-        const variation = formatMove(alternative.move, ply, true) + emit(alternative, ply + 1);
-        output += " (" + variation.trim() + ")";
+        const continuationInVariation = emit(alternative, ply + 1);
+        const variation = formatMove(alternative.move, ply, true) +
+          (continuationInVariation ? " " + continuationInVariation : "");
+        output += " (" + variation + ")";
       }
       const continuation = emit(main, ply + 1);
       if (continuation) output += " " + continuation;

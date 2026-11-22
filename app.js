@@ -47,13 +47,12 @@
 
   let game = new Chess();
 
-  let lines = [{ id: "main", name: "Основная линия", moves: [] }];
-
-  let currentLineId = "main";
-
+  let moveTree = new window.ChessStudyMoveTree();
+  let activeLeaf = moveTree.root;
+  let currentNode = moveTree.root;
   let history = [];
-
   let cursor = 0;
+  let branchCreationMode = false;
 
 
 
@@ -385,637 +384,37 @@
 
 
 
-  function getLine() {
-
-    return lines.find(line => line.id === currentLineId) || lines[0];
-
-  }
-
-
-
   function sameMove(a, b) {
-
     return Boolean(a && b) &&
-
       a.from === b.from &&
-
       a.to === b.to &&
-
       (a.promotion || "") === (b.promotion || "");
-
   }
 
-
-
-  function sameMoves(a, b) {
-
-    return a.length === b.length &&
-
-      a.every((move, i) => sameMove(move, b[i]));
-
+  function getActivePathNodes() {
+    return moveTree.getNodePath(activeLeaf);
   }
 
-
-
-  function makeId() {
-
-    return "variation-" + Date.now() + "-" +
-
-      Math.random().toString(36).slice(2, 8);
-
+  function setActiveLeafFromNode(node) {
+    activeLeaf = moveTree.mainLeafFrom(node || moveTree.root);
+    history = moveTree.getPath(activeLeaf);
   }
 
-
-
-  function squareName(file, rank) {
-
-    return "abcdefgh"[file] + (rank + 1);
-
+  function findBranchOnActivePath() {
+    return moveTree.firstAlternativeOnPath(activeLeaf);
   }
-
-
-
-  // ---------- Additional styling ----------
-
-
-
-  function installStyles() {
-
-    if ($("chessStudyEnhancements")) return;
-
-
-
-    const style = document.createElement("style");
-
-    style.id = "chessStudyEnhancements";
-
-
-
-    style.textContent = `
-
-      #board {
-        position: relative;
-        transition: none !important;
-        animation: none !important;
-      }
-
-
-
-      #board .piece {
-
-        display: inline-flex;
-
-        align-items: center;
-
-        justify-content: center;
-
-        width: 100%;
-
-        height: 100%;
-
-        cursor: grab;
-
-        user-select: none;
-
-        -webkit-user-select: none;
-
-        animation: none !important;
-
-        transition: none !important;
-
-      }
-
-
-
-      #board .piece img {
-        display: block;
-        width: 89%;
-        height: 89%;
-        object-fit: contain;
-        pointer-events: none;
-        user-select: none;
-        -webkit-user-drag: none;
-      }
-
-      #board .piece:active {
-
-        cursor: grabbing;
-
-      }
-
-
-
-      #board .square {
-
-        position: relative;
-
-        min-width: 0;
-
-        min-height: 0;
-
-        padding: 0;
-
-        touch-action: manipulation;
-
-      }
-
-
-
-      #board .square.selected {
-
-        box-shadow: inset 0 0 0 4px rgba(246, 220, 70, .85);
-
-      }
-
-
-
-      #board .square.legal::after {
-
-        content: "";
-
-        position: absolute;
-
-        width: 26%;
-
-        height: 26%;
-
-        border-radius: 50%;
-
-        background: rgba(20, 20, 20, .27);
-
-        pointer-events: none;
-
-      }
-
-
-
-      #board .square.legal.has-piece::after {
-
-        width: 88%;
-
-        height: 88%;
-
-        background: transparent;
-
-        border: 5px solid rgba(20, 20, 20, .25);
-
-        box-sizing: border-box;
-
-      }
-
-
-
-      #board .square.last-move {
-
-        background-image: linear-gradient(
-
-          rgba(246, 220, 70, .32),
-
-          rgba(246, 220, 70, .32)
-
-        );
-
-      }
-
-      .chess-load-error {
-        grid-column: 1 / -1;
-        padding: 24px 16px;
-        color: #ffb5aa;
-        text-align: center;
-        background: #201f1c;
-        border-radius: 8px;
-      }
-      
-      #board svg.chess-arrow-layer {
-
-        position: absolute;
-
-        inset: 0;
-
-        width: 100%;
-
-        height: 100%;
-
-        pointer-events: none;
-
-        overflow: visible;
-
-        z-index: 5;
-
-      }
-
-
-
-      .chess-variation-tools {
-
-        display: flex;
-
-        flex-wrap: wrap;
-
-        gap: 8px;
-
-        align-items: center;
-
-        margin: 8px 0 12px;
-
-      }
-
-
-
-      .chess-variation-tools select,
-
-      .chess-variation-tools button,
-
-      .chess-rating-field input {
-
-        border: 1px solid rgba(255,255,255,.15);
-
-        border-radius: 7px;
-
-        padding: 8px 10px;
-
-        color: inherit;
-
-        background: #302e2b;
-
-        font: inherit;
-
-      }
-
-
-
-      .chess-variation-tools button {
-
-        cursor: pointer;
-
-      }
-
-
-
-      .chess-variation-tools button:disabled {
-
-        opacity: .45;
-
-        cursor: not-allowed;
-
-      }
-
-
-
-      .chess-rating-fields {
-
-        display: grid;
-
-        grid-template-columns: 1fr 1fr;
-
-        gap: 10px;
-
-        margin: 10px 0;
-
-      }
-
-
-
-      .chess-rating-field {
-
-        display: flex;
-
-        flex-direction: column;
-
-        gap: 5px;
-
-        font-size: 12px;
-
-      }
-
-
-
-      .chess-rating-field input {
-
-        box-sizing: border-box;
-
-        width: 100%;
-
-      }
-
-
-
-      @media (prefers-reduced-motion: reduce) {
-
-        #board, #board .piece {
-
-          animation: none !important;
-
-          transition: none !important;
-
-        }
-
-      }
-
-
-
-      @media (max-width: 600px) {
-
-        .chess-rating-fields {
-
-          grid-template-columns: 1fr;
-
-        }
-
-      }
-
-    `;
-
-
-
-    document.head.appendChild(style);
-
-  }
-
-
-
-  // ---------- Ratings ----------
-
-
-
-  function installRatingFields() {
-
-    if (!$("whiteRatingInput") && $("whiteInput")) {
-
-      const wrapper = document.createElement("div");
-
-      wrapper.className = "chess-rating-fields";
-
-      wrapper.innerHTML = `
-
-        <label class="chess-rating-field">
-
-          White rating (Elo)
-
-          <input id="whiteRatingInput" type="number"
-
-                 min="0" max="4000" step="1"
-
-                 placeholder="e.g. 1800">
-
-        </label>
-
-        <label class="chess-rating-field">
-
-          Black rating (Elo)
-
-          <input id="blackRatingInput" type="number"
-
-                 min="0" max="4000" step="1"
-
-                 placeholder="e.g. 1750">
-
-        </label>
-
-      `;
-
-
-
-      const notes = $("notesInput");
-
-
-
-      if (notes && notes.parentElement) {
-
-        notes.parentElement.insertAdjacentElement("afterend", wrapper);
-
-      } else {
-
-        $("blackInput").parentElement.insertAdjacentElement(
-
-          "afterend", wrapper
-
-        );
-
-      }
-
-
-
-      wrapper.querySelectorAll("input").forEach(input => {
-
-        input.addEventListener("input", updateHeading);
-
-      });
-
-    }
-
-  }
-
-
-
-  function getRating(id) {
-
-    const input = $(id);
-
-    if (!input || input.value.trim() === "") return "";
-
-
-
-    const value = Number(input.value);
-
-
-
-    if (!Number.isFinite(value) || value < 0 || value > 4000) {
-
-      return "";
-
-    }
-
-
-
-    return String(Math.round(value));
-
-  }
-
-
-
-  function metaFromInputs() {
-
-    return {
-
-      white: $("whiteInput").value.trim() || "White",
-
-      black: $("blackInput").value.trim() || "Black",
-
-      whiteElo: getRating("whiteRatingInput"),
-
-      blackElo: getRating("blackRatingInput"),
-
-      event: $("eventInput").value.trim() || "Casual game",
-
-      date: $("dateInput").value || "",
-
-      notes: $("notesInput").value.trim()
-
-    };
-
-  }
-
-
-
-  function loadMeta(m = {}) {
-
-    $("whiteInput").value = m.white || "White";
-
-    $("blackInput").value = m.black || "Black";
-
-    $("eventInput").value = m.event || "Casual game";
-
-    $("dateInput").value = m.date || "";
-
-    $("notesInput").value = m.notes || "";
-
-
-
-    if ($("whiteRatingInput")) {
-
-      $("whiteRatingInput").value = m.whiteElo || "";
-
-    }
-
-
-
-    if ($("blackRatingInput")) {
-
-      $("blackRatingInput").value = m.blackElo || "";
-
-    }
-
-
-
-    updateHeading();
-
-  }
-
-
-
-  function updateHeading() {
-
-    const m = metaFromInputs();
-
-
-
-    if ($("whiteName")) {
-
-      $("whiteName").textContent =
-
-        m.white + (m.whiteElo ? " (" + m.whiteElo + ")" : "");
-
-    }
-
-
-
-    if ($("blackName")) {
-
-      $("blackName").textContent =
-
-        m.black + (m.blackElo ? " (" + m.blackElo + ")" : "");
-
-    }
-
-
-
-    if ($("gameTitle")) {
-
-      $("gameTitle").textContent = m.event || "Untitled game";
-
-    }
-
-
-
-    if ($("gameMeta")) {
-
-      $("gameMeta").textContent =
-
-        `${m.white} vs ${m.black}` +
-
-        (m.date ? " · " + m.date : "");
-
-    }
-
-  }
-
-
-
-  // ---------- Position and lines ----------
-
-
-
-  function replayPosition(n) {
-
-    const line = getLine();
-
-
-
-    game = new Chess();
-
-
-
-    for (let i = 0; i < n && i < line.moves.length; i++) {
-
-      const move = line.moves[i];
-
-
-
-      const result = game.move({
-
-        from: move.from,
-
-        to: move.to,
-
-        promotion: move.promotion || "q"
-
-      });
-
-
-
-      if (!result) {
-
-        console.error("Could not replay move:", move);
-
-        break;
-
-      }
-
-    }
-
-
-
-    history = line.moves;
-
-    cursor = Math.max(0, Math.min(n, history.length));
-
-  }
-
-
 
   function goTo(n) {
-
     const previousCursor = cursor;
     replayPosition(n);
-    // When the user browses an already played game, play the sound belonging
-    // to the position now shown. This works in both forward and reverse review.
-    if (cursor !== previousCursor && cursor > 0) {
-      playMoveSound(history[cursor - 1]);
-    }
-
+    if (cursor !== previousCursor && cursor > 0) playMoveSound(history[cursor - 1]);
     selected = null;
-
     legalTargets = [];
-
     renderAll();
     requestPositionEvaluation();
-
   }
 
-
-
-  function getCurrentLineResult() {
+    function getCurrentLineResult() {
 
     const temp = new Chess();
 
@@ -1591,19 +990,13 @@ square.addEventListener("click", event => {
             return;
           }
           playMoveSound(move);
-          // Rebuild the current line through the same storage/navigation path.
-          const currentMoves = game.history({ verbose: true });
-          const existing = lines.find(line => sameMoves(line.moves, currentMoves));
-          if (existing) {
-            currentLineId = existing.id;
-          } else {
-            getLine().moves = currentMoves;
-          }
-          history = getLine().moves;
-          cursor = history.length;
+          const recorded = moveTree.addMove(currentNode, move);
+          currentNode = recorded.node;
+          setActiveLeafFromNode(currentNode);
+          cursor = moveTree.getNodePath(currentNode).length;
           selected = null;
           legalTargets = [];
-          renderAll();
+          goTo(cursor);
           updateEngineEndUI();
           setEngineStatus(isCompletedPosition() ? "Game over" : "Your turn");
           if (!isCompletedPosition() && engineWorker) requestEngineEvaluation();
@@ -1947,133 +1340,41 @@ square.addEventListener("click", event => {
   function commitMove(from, to, promotion, inputMethod = "click") {
     if (engineMode && (engineGameEnded || isCompletedPosition() || engineThinking || game.turn() === engineColor || cursor !== history.length)) return;
 
-    // Click-to-move uses the smooth animation. Native drag-and-drop keeps
-    // its original immediate placement without the extra animated overlay.
-    // Stockfish and board navigation continue using the default behavior.
     nextMoveAnimationMode = inputMethod === "drag" ? "none" : "default";
 
-    // If the expected move is chosen, continue the current line.
-
-    if (cursor < history.length && sameMove(history[cursor], { from, to })) {
-
+    if (cursor < history.length && sameMove(history[cursor], { from, to, promotion })) {
       goTo(cursor + 1);
-
       return;
-
     }
 
-
-
-    const prefix = history.slice(0, cursor);
-
-
-
+    const parentNode = currentNode;
     let move;
-
-
-
     try {
-
-      move = game.move({
-
-        from,
-
-        to,
-
-        promotion
-
-      });
-
+      move = game.move({ from, to, promotion });
     } catch {
-
       move = null;
-
     }
-
-
 
     if (!move) {
-
       selected = null;
-
       legalTargets = [];
-
       renderBoard();
-
       notify("Недопустимый ход");
-
       return;
-
     }
-
-
 
     playMoveSound(move);
-
-    const newMoves = game.history({ verbose: true });
-
-
-
-    // Reuse an identical existing line if one already exists.
-
-    const existing = lines.find(line => sameMoves(line.moves, newMoves));
-
-
-
-    if (existing) {
-
-      currentLineId = existing.id;
-
-    } else {
-
-      const oldLine = getLine();
-
-
-
-      if (cursor < oldLine.moves.length) {
-
-        const newLine = {
-
-          id: makeId(),
-
-          name: "Вариант " + variationNumber++,
-
-          moves: newMoves
-
-        };
-
-
-
-        lines.push(newLine);
-
-        currentLineId = newLine.id;
-
-      } else {
-
-        oldLine.moves = newMoves;
-
-      }
-
-    }
-
-
-
-    history = getLine().moves;
-
-    cursor = newMoves.length;
-
-
-
+    const recorded = moveTree.addMove(parentNode, move);
+    currentNode = recorded.node;
+    setActiveLeafFromNode(currentNode);
+    cursor = moveTree.getNodePath(currentNode).length;
+    branchCreationMode = false;
     selected = null;
-
     legalTargets = [];
-
-
 
     goTo(cursor);
     updateEngineEndUI();
     if (engineMode && !isCompletedPosition() && engineWorker && game.turn() === engineColor) {
-      // Give the player a brief pause after their move before Stockfish starts searching.
       if (engineMoveTimer !== null) clearTimeout(engineMoveTimer);
       setEngineStatus("Stockfish is preparing…");
       engineMoveTimer = setTimeout(() => {
@@ -2081,12 +1382,9 @@ square.addEventListener("click", event => {
         requestEngineMove();
       }, ENGINE_MOVE_DELAY_MS);
     }
-
   }
 
-
-
-  // ---------- Arrows with the right mouse button ----------
+    // ---------- Arrows with the right mouse button ----------
 
 
 

@@ -2389,47 +2389,6 @@ square.addEventListener("click", event => {
     }
 
     if (!moveTree.root.children.length) {
-        list.innerHTML = '<div class="empty">В партии пока нет ходов.</div>';
-        return;
-      }
-
-      const treeRoot = document.createElement("div");
-      treeRoot.className = "analysis-tree";
-      const renderBranch = (parent, ply, container) => {
-        parent.children.forEach((node, index) => {
-          const row = document.createElement("div");
-          row.className = "analysis-tree-row" + (index > 0 ? " is-variation" : " is-main");
-          const number = Math.floor((ply - 1) / 2) + 1;
-          const prefix = node.move.color === "w" ? number + "." : (index > 0 || ply === 1 ? number + "..." : "");
-          const moveButton = document.createElement("button");
-          moveButton.type = "button";
-          moveButton.className = "analysis-tree-move";
-          moveButton.classList.toggle("active", currentNode === node);
-          moveButton.dataset.nodeId = node.id;
-          moveButton.textContent = (prefix ? prefix + " " : "") + node.move.san;
-          moveButton.addEventListener("click", () => goToMoveNode(node));
-          const kind = document.createElement("span");
-          kind.className = "analysis-tree-kind";
-          kind.textContent = index === 0 ? "Основное" : "Вариант";
-          row.append(moveButton, kind);
-          container.appendChild(row);
-
-          if (node.children.length) {
-            const nested = document.createElement("div");
-            nested.className = "analysis-tree-children";
-            renderBranch(node, ply + 1, nested);
-            container.appendChild(nested);
-          }
-        });
-      };
-      renderBranch(moveTree.root, 1, treeRoot);
-      list.appendChild(treeRoot);
-      const active = list.querySelector(".analysis-tree-move.active");
-      if (active) active.scrollIntoView({ block: "nearest" });
-      return;
-    }
-
-    if (!moveTree.root.children.length) {
       list.innerHTML = '<div class="empty">Moves will appear here.</div>';
       return;
     }

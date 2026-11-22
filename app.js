@@ -74,8 +74,6 @@
 
   let toastTimer = null;
 
-  let variationNumber = 1;
-
   // ---------- Appearance preferences ----------
   const APPEARANCE_STORE = "chess-study-appearance-v1";
   let appearanceSettings = { theme: "system", liquidGlass: false, glassStrength: 65, glassOpacity: 65, pieceAnimation: true, pieceSet: "modern", soundEnabled: true, background: "" };
@@ -402,6 +400,33 @@
 
   function findBranchOnActivePath() {
     return moveTree.firstAlternativeOnPath(activeLeaf);
+  }
+
+  function replayPosition(n) {
+    const nodes = getActivePathNodes();
+    history = nodes.map(node => ({ ...node.move }));
+    cursor = Math.max(0, Math.min(Number(n) || 0, nodes.length));
+    currentNode = cursor ? nodes[cursor - 1] : moveTree.root;
+
+    game = new Chess();
+    for (let i = 0; i < cursor; i++) {
+      const move = nodes[i].move;
+      const result = game.move({
+        from: move.from,
+        to: move.to,
+        promotion: move.promotion || "q"
+      });
+      if (!result) {
+        console.error("Could not replay move-tree node:", nodes[i]);
+        break;
+      }
+    }
+  }
+
+  function goToMoveNode(node) {
+    if (!node || !moveTree.isAncestor(moveTree.root, node)) return;
+    setActiveLeafFromNode(node);
+    goTo(moveTree.getNodePath(node).length);
   }
 
   function goTo(n) {

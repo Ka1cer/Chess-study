@@ -120,7 +120,7 @@
 
     isAncestor(ancestor, node) {
       let cursor = node;
-      while (cursor && cursor !== this.root) {
+      while (cursor) {
         if (cursor === ancestor) return true;
         cursor = cursor.parent;
       }

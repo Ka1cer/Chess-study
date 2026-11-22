@@ -368,3 +368,43 @@ body.light-theme.liquid-glass select { background: rgba(245,248,252,.38); }
   .details-panel, .database-panel { grid-column: 1; grid-row: auto; }
   #evaluationGraphCanvas { height: 175px; }
 }
+
+
+/* v3.2 Move Widget — compact inline notation and variation branches */
+.move-list.move-tree-list {
+  display: block;
+  white-space: normal;
+  line-height: 2.1;
+  padding: 12px 13px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.move-tree-list .move-tree-cell {
+  display: inline;
+  min-width: 0;
+  padding: 2px 4px;
+  margin: 0 1px;
+  line-height: 1.7;
+  font-size: 13px;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.move-tree-list .move-tree-cell.active {
+  background: var(--green, #81b64c);
+  color: #172012;
+  border-radius: 4px;
+}
+.move-variation {
+  display: inline;
+  padding: 0 1px;
+  color: var(--muted);
+  border-radius: 4px;
+  background: rgba(128, 128, 128, .08);
+  white-space: normal;
+}
+.chess-variation-tools button.is-armed {
+  border-color: var(--green, #81b64c);
+  color: var(--green2, #9bd77e);
+}
+body.light-theme .move-variation { background: rgba(90, 110, 130, .08); }

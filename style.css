@@ -961,3 +961,17 @@ body.light-theme .details-dialog label { color: #566273; }
     max-height: 48vh;
   }
 }
+
+
+/* v3.2.14 — move board flip control into Tools and rename game heading */
+.tools-panel #flipBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  margin-top: 0;
+}
+.board-panel .game-heading .eyebrow {
+  letter-spacing: 1.6px;
+}

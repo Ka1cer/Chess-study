@@ -853,3 +853,65 @@ body.light-theme .details-dialog label { color: #566273; }
   .details-dialog .notes-field,
   .details-dialog .save-field { grid-column: 1; }
 }
+
+
+/* v3.2.12 — persistent party comments below the Moves widget */
+.party-comments {
+  margin-top: 14px;
+  padding: 0;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.party-comments-heading {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px 7px 13px;
+  border-bottom: 1px solid var(--line);
+}
+.party-comments-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: -.15px;
+}
+.party-comments-heading h3 span {
+  color: var(--green2);
+  margin-right: 7px;
+}
+.party-comments-edit {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  font-size: 17px;
+  line-height: 1;
+}
+.party-comments-text {
+  max-height: clamp(160px, 25vh, 240px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 13px 14px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  scrollbar-color: var(--green) transparent;
+}
+.party-comments-text.is-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+.party-comments-text::-webkit-scrollbar { width: 6px; }
+.party-comments-text::-webkit-scrollbar-thumb {
+  background: var(--green);
+  border-radius: 8px;
+}
+@media (max-width: 720px) {
+  .party-comments-text { max-height: min(22vh, 190px); }
+}

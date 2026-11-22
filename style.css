@@ -712,14 +712,15 @@ body.liquid-glass .games-dialog {
 
 
 
-/* v3.2.7 — restore standard nav button and Liquid Glass games modal */
+
+
+/* v3.2.8 — keep My games dropdown in the header; change only its glass appearance */
+.brand-group { position: relative; }
 #myGamesOpenBtn.my-games-nav-btn {
-  /* Use the same base and Liquid Glass styling as the other ghost nav buttons. */
-  background: initial;
-  border-color: initial;
+  /* Keep the same standard ghost-button appearance as New game / Import / Export. */
+  background: inherit;
+  border-color: inherit;
   box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 body.liquid-glass #myGamesOpenBtn.my-games-nav-btn {
   background: rgba(255,255,255,.09);
@@ -728,43 +729,39 @@ body.liquid-glass #myGamesOpenBtn.my-games-nav-btn {
   backdrop-filter: blur(12px);
 }
 .games-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  overflow-y: auto;
-  background: rgba(0,0,0,.42);
-  -webkit-backdrop-filter: blur(7px);
-  backdrop-filter: blur(7px);
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 9px);
+  left: 164px;
+  width: min(620px, calc(100vw - 230px));
+  padding: 0;
+  margin: 0;
+  display: block;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .games-modal[hidden] { display: none !important; }
 .games-dialog {
-  width: min(760px, 94vw);
-  max-height: min(78vh, 720px);
-  margin: auto;
-  padding: 16px;
+  width: 100%;
+  max-height: min(66vh,590px);
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 16px 44px rgba(0,0,0,.30);
 }
-.games-popover-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.games-popover-heading h2 { margin: 0; font-size: 15px; }
-.games-dialog .db-tools { flex: 0 0 auto; }
-.games-dialog .saved-games {
-  flex: 1 1 auto;
-  min-height: 60px;
-  max-height: none;
-  overflow: auto;
-  padding-right: 2px;
-}
+.games-popover-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.games-popover-heading h2 { margin:0; font-size:15px; }
+.games-dialog .db-tools { flex:0 0 auto; }
+.games-dialog .saved-games { flex:1 1 auto; min-height:60px; max-height:none; overflow:auto; padding-right:2px; }
 body.liquid-glass .games-dialog {
   background: rgba(34,36,41,var(--glass-alpha));
   border-color: rgba(255,255,255,.13);
@@ -772,7 +769,12 @@ body.liquid-glass .games-dialog {
   -webkit-backdrop-filter: blur(var(--glass-blur,22px)) saturate(calc(100% + var(--glass-strength)*.7%));
   backdrop-filter: blur(var(--glass-blur,22px)) saturate(calc(100% + var(--glass-strength)*.7%));
 }
-@media(max-width:520px) {
-  .games-modal { padding: 12px; }
-  .games-dialog { width: 100%; max-height: 84vh; padding: 13px; }
+body.liquid-glass .games-dialog::before {
+  content:"";
+  position:absolute;
+  inset:0 0 auto;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,var(--glass-highlight,.12)),transparent);
+  pointer-events:none;
 }
+@media(max-width:700px) { .games-modal { left:0; width:min(94vw,520px); } }

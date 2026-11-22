@@ -47,13 +47,13 @@
 
   let game = new Chess();
 
-  let lines = [{ id: "main", name: "Основная линия", moves: [] }];
-
-  let currentLineId = "main";
-
+  let moveTree = new window.ChessStudyMoveTree();
+  let activeLeaf = moveTree.root;
+  let currentNode = moveTree.root;
   let history = [];
-
   let cursor = 0;
+  let branchCreationMode = false;
+  let analysisViewMode = false;
 
 
 
@@ -385,14 +385,6 @@
 
 
 
-  function getLine() {
-
-    return lines.find(line => line.id === currentLineId) || lines[0];
-
-  }
-
-
-
   function sameMove(a, b) {
 
     return Boolean(a && b) &&
@@ -407,7 +399,20 @@
 
 
 
-  function sameMoves(a, b) {
+  function getActivePathNodes() {
+    return moveTree.getNodePath(activeLeaf);
+  }
+
+  function setActiveLeafFromNode(node) {
+    activeLeaf = moveTree.mainLeafFrom(node || moveTree.root);
+    history = moveTree.getPath(activeLeaf);
+  }
+
+  function findBranchOnActivePath() {
+    return moveTree.firstAlternativeOnPath(activeLeaf);
+  }
+
+    function sameMoves(a, b) {
 
     return a.length === b.length &&
 
@@ -492,8 +497,7 @@
         width: 89%;
         height: 89%;
         object-fit: contain;
-        pointer-events: none;
-        user-select: none;
+        pointer-events: none;        user-select: none;
         -webkit-user-drag: none;
       }
 
@@ -894,9 +898,20 @@
 
 
 
+  function renderPartyComments() {
+    const output = $("partyCommentsText");
+    const input = $("notesInput");
+    if (!output || !input) return;
+    const notes = input.value.trim();
+    output.textContent = notes || "Комментариев пока нет.";
+    output.classList.toggle("is-empty", !notes);
+  }
+
+
   function updateHeading() {
 
     const m = metaFromInputs();
+    renderPartyComments();
 
 
 
@@ -947,78 +962,49 @@
 
 
   function replayPosition(n) {
-
-    const line = getLine();
-
-
+    const nodes = getActivePathNodes();
+    history = nodes.map(node => ({ ...node.move }));
+    cursor = Math.max(0, Math.min(Number(n) || 0, nodes.length));
+    currentNode = cursor ? nodes[cursor - 1] : moveTree.root;
 
     game = new Chess();
-
-
-
-    for (let i = 0; i < n && i < line.moves.length; i++) {
-
-      const move = line.moves[i];
-
-
-
+    for (let i = 0; i < cursor; i++) {
+      const move = nodes[i].move;
       const result = game.move({
-
         from: move.from,
-
         to: move.to,
-
         promotion: move.promotion || "q"
-
       });
-
-
-
       if (!result) {
-
-        console.error("Could not replay move:", move);
-
+        console.error("Could not replay move-tree node:", nodes[i]);
         break;
-
       }
-
     }
-
-
-
-    history = line.moves;
-
-    cursor = Math.max(0, Math.min(n, history.length));
-
   }
 
-
+  function goToMoveNode(node) {
+    if (!node || !moveTree.isAncestor(moveTree.root, node)) return;
+    setActiveLeafFromNode(node);
+    // Keep the full selected continuation available, but show the exact node
+    // the user clicked rather than jumping to the end of that continuation.
+    goTo(moveTree.getNodePath(node).length);
+    // In analysis mode, recalculate the graph for this selected continuation.
+    if (analysisViewMode) analyzeGameGraph();
+  }
 
   function goTo(n) {
-
     const previousCursor = cursor;
     replayPosition(n);
-    // When the user browses an already played game, play the sound belonging
-    // to the position now shown. This works in both forward and reverse review.
-    if (cursor !== previousCursor && cursor > 0) {
-      playMoveSound(history[cursor - 1]);
-    }
-
+    if (cursor !== previousCursor && cursor > 0) playMoveSound(history[cursor - 1]);
     selected = null;
-
     legalTargets = [];
-
     renderAll();
     requestPositionEvaluation();
-
   }
 
-
-
-  function getCurrentLineResult() {
+    function getCurrentLineResult() {
 
     const temp = new Chess();
-
 
 
     for (const move of history) {
@@ -1520,8 +1506,7 @@ square.addEventListener("click", event => {
   function stopEngineSearch() {
     if (engineMoveTimer !== null) {
       clearTimeout(engineMoveTimer);
-      engineMoveTimer = null;
-    }
+      engineMoveTimer = null;    }
     engineRequest++;
     if (engineWorker && (engineThinking || engineAnalysisOnly)) {
       ignoreNextBestmove = true;
@@ -1591,19 +1576,13 @@ square.addEventListener("click", event => {
             return;
           }
           playMoveSound(move);
-          // Rebuild the current line through the same storage/navigation path.
-          const currentMoves = game.history({ verbose: true });
-          const existing = lines.find(line => sameMoves(line.moves, currentMoves));
-          if (existing) {
-            currentLineId = existing.id;
-          } else {
-            getLine().moves = currentMoves;
-          }
-          history = getLine().moves;
-          cursor = history.length;
+          const recorded = moveTree.addMove(currentNode, move);
+          currentNode = recorded.node;
+          setActiveLeafFromNode(currentNode);
+          cursor = moveTree.getNodePath(currentNode).length;
           selected = null;
           legalTargets = [];
-          renderAll();
+          goTo(cursor);
           updateEngineEndUI();
           setEngineStatus(isCompletedPosition() ? "Game over" : "Your turn");
           if (!isCompletedPosition() && engineWorker) requestEngineEvaluation();
@@ -1947,133 +1926,41 @@ square.addEventListener("click", event => {
   function commitMove(from, to, promotion, inputMethod = "click") {
     if (engineMode && (engineGameEnded || isCompletedPosition() || engineThinking || game.turn() === engineColor || cursor !== history.length)) return;
 
-    // Click-to-move uses the smooth animation. Native drag-and-drop keeps
-    // its original immediate placement without the extra animated overlay.
-    // Stockfish and board navigation continue using the default behavior.
     nextMoveAnimationMode = inputMethod === "drag" ? "none" : "default";
 
-    // If the expected move is chosen, continue the current line.
-
-    if (cursor < history.length && sameMove(history[cursor], { from, to })) {
-
+    if (cursor < history.length && sameMove(history[cursor], { from, to, promotion })) {
       goTo(cursor + 1);
-
       return;
-
     }
 
-
-
-    const prefix = history.slice(0, cursor);
-
-
-
+    const parentNode = currentNode;
     let move;
-
-
-
     try {
-
-      move = game.move({
-
-        from,
-
-        to,
-
-        promotion
-
-      });
-
+      move = game.move({ from, to, promotion });
     } catch {
-
       move = null;
-
     }
-
-
 
     if (!move) {
-
       selected = null;
-
       legalTargets = [];
-
       renderBoard();
-
       notify("Недопустимый ход");
-
       return;
-
     }
-
-
 
     playMoveSound(move);
-
-    const newMoves = game.history({ verbose: true });
-
-
-
-    // Reuse an identical existing line if one already exists.
-
-    const existing = lines.find(line => sameMoves(line.moves, newMoves));
-
-
-
-    if (existing) {
-
-      currentLineId = existing.id;
-
-    } else {
-
-      const oldLine = getLine();
-
-
-
-      if (cursor < oldLine.moves.length) {
-
-        const newLine = {
-
-          id: makeId(),
-
-          name: "Вариант " + variationNumber++,
-
-          moves: newMoves
-
-        };
-
-
-
-        lines.push(newLine);
-
-        currentLineId = newLine.id;
-
-      } else {
-
-        oldLine.moves = newMoves;
-
-      }
-
-    }
-
-
-
-    history = getLine().moves;
-
-    cursor = newMoves.length;
-
-
-
+    const recorded = moveTree.addMove(parentNode, move);
+    currentNode = recorded.node;
+    setActiveLeafFromNode(currentNode);
+    cursor = moveTree.getNodePath(currentNode).length;
+    branchCreationMode = false;
     selected = null;
-
     legalTargets = [];
-
-
 
     goTo(cursor);
     updateEngineEndUI();
     if (engineMode && !isCompletedPosition() && engineWorker && game.turn() === engineColor) {
-      // Give the player a brief pause after their move before Stockfish starts searching.
       if (engineMoveTimer !== null) clearTimeout(engineMoveTimer);
       setEngineStatus("Stockfish is preparing…");
       engineMoveTimer = setTimeout(() => {
@@ -2081,12 +1968,9 @@ square.addEventListener("click", event => {
         requestEngineMove();
       }, ENGINE_MOVE_DELAY_MS);
     }
-
   }
 
-
-
-  // ---------- Arrows with the right mouse button ----------
+    // ---------- Arrows with the right mouse button ----------
 
 
 
@@ -2121,7 +2005,6 @@ square.addEventListener("click", event => {
       event.preventDefault();
 
     });
-
 
 
     board.addEventListener("mousedown", event => {
@@ -2384,252 +2267,197 @@ square.addEventListener("click", event => {
 
 
   function renderMoves() {
-
     const list = $("moveList");
-
     if (!list) return;
 
-
-
     let tools = $("variationTools");
-
-
-
     if (!tools) {
-
       tools = document.createElement("div");
-
       tools.id = "variationTools";
-
       tools.className = "chess-variation-tools";
-
       list.parentElement.insertBefore(tools, list);
-
     }
-
-
-
     tools.innerHTML = "";
 
-
-
-    const select = document.createElement("select");
-
-    select.setAttribute("aria-label", "Select variation");
-
-
-
-    lines.forEach(line => {
-
-      const option = document.createElement("option");
-
-      option.value = line.id;
-
-      option.textContent =
-
-        `${line.name} · ${Math.ceil(line.moves.length / 2)} ходов`;
-
-      option.selected = line.id === currentLineId;
-
-      select.appendChild(option);
-
-    });
-
-
-
-    select.addEventListener("change", () => {
-
-      currentLineId = select.value;
-
-      goTo(0);
-
-    });
-
-
-
     const addButton = document.createElement("button");
-
     addButton.type = "button";
-
-    addButton.textContent = "+ Вариант";
-
-    addButton.title = "Создать альтернативную линию из текущей позиции";
-
-
-
+    addButton.textContent = branchCreationMode ? "Выберите ход…" : "+ Вариант";
+    addButton.title = "Перейдите к нужной позиции и сыграйте альтернативный ход";
+    addButton.classList.toggle("is-armed", branchCreationMode);
     addButton.addEventListener("click", () => {
-
-      const prefix = history.slice(0, cursor);
-
-      const newLine = {
-
-        id: makeId(),
-
-        name: "Вариант " + variationNumber++,
-
-        moves: prefix.slice()
-
-      };
-
-
-
-      lines.push(newLine);
-
-      currentLineId = newLine.id;
-
-
-
-      arrows = [];
-
-      goTo(cursor);
-
-      notify("Вариант создан");
-
+      branchCreationMode = !branchCreationMode;
+      renderMoves();
+      if (branchCreationMode) notify("Сделайте альтернативный ход на доске");
     });
 
-
+    const branch = findBranchOnActivePath();
+    const promoteButton = document.createElement("button");
+    promoteButton.type = "button";
+    promoteButton.textContent = "Сделать основным";
+    promoteButton.disabled = !branch;
+    promoteButton.title = "Переместить выбранный вариант на первое место";
+    promoteButton.addEventListener("click", () => {
+      const selectedBranch = findBranchOnActivePath();
+      if (!selectedBranch || !moveTree.promoteToMain(selectedBranch)) return;
+      setActiveLeafFromNode(selectedBranch);
+      goTo(cursor);
+      notify("Вариант стал основным");
+    });
 
     const deleteButton = document.createElement("button");
-
     deleteButton.type = "button";
-
     deleteButton.textContent = "Удалить вариант";
-
-    deleteButton.disabled =
-
-      currentLineId === "main" || lines.length <= 1;
-
-
-
+    deleteButton.disabled = !branch;
     deleteButton.addEventListener("click", () => {
-
-      if (currentLineId === "main") {
-
-        notify("Основную линию удалить нельзя");
-
+      const selectedBranch = findBranchOnActivePath();
+      if (!selectedBranch) {
+        notify("Выберите вариант, который нужно удалить");
         return;
-
       }
-
-
-
-      lines = lines.filter(line => line.id !== currentLineId);
-
-      currentLineId = "main";
-
+      const parent = selectedBranch.parent;
+      const parentPly = moveTree.getNodePath(parent).length;
+      moveTree.removeBranch(selectedBranch);
+      setActiveLeafFromNode(parent);
       arrows = [];
-
-
-
-      goTo(getLine().moves.length);
-
+      goTo(parentPly);
       notify("Вариант удалён");
-
     });
 
-
-
-    tools.append(select, addButton, deleteButton);
-
-
-
+    const viewToggle = document.createElement("button");
+    viewToggle.type = "button";
+    viewToggle.className = "move-view-toggle";
+    viewToggle.textContent = analysisViewMode ? "Обычные ходы" : "Дерево ходов";
+    viewToggle.setAttribute("aria-pressed", String(analysisViewMode));
+    viewToggle.addEventListener("click", () => {
+      analysisViewMode = !analysisViewMode;
+      renderMoves();
+    });
+    tools.append(addButton, promoteButton, deleteButton, viewToggle);
     list.innerHTML = "";
+    list.classList.add("move-tree-list");
 
-
-
-    if (!history.length) {
-
-      list.innerHTML =
-
-        '<div class="empty">Moves will appear here.</div>';
-
-      return;
-
-    }
-
-
-
-    for (let i = 0; i < history.length; i += 2) {
-
-      const row = document.createElement("div");
-
-      row.className = "move-row";
-
-
-
-      const no = document.createElement("span");
-
-      no.className = "move-no";
-
-      no.textContent = (Math.floor(i / 2) + 1) + ".";
-
-
-
-      const white = document.createElement("button");
-
-      white.className = "move-cell";
-
-      white.textContent = history[i].san;
-
-      white.classList.toggle("active", cursor === i + 1);
-
-      white.addEventListener("click", () => goTo(i + 1));
-
-
-
-      row.append(no, white);
-
-
-
-      if (history[i + 1]) {
-
-        const black = document.createElement("button");
-
-        black.className = "move-cell";
-
-        black.textContent = history[i + 1].san;
-
-        black.classList.toggle("active", cursor === i + 2);
-
-        black.addEventListener("click", () => goTo(i + 2));
-
-        row.appendChild(black);
-
-      } else {
-
-        row.appendChild(document.createElement("span"));
-
+    if (analysisViewMode) {
+      if (!moveTree.root.children.length) {
+        list.innerHTML = '<div class="empty">В партии пока нет ходов.</div>';
+        return;
       }
 
+      const treeRoot = document.createElement("div");
+      treeRoot.className = "analysis-tree";
 
+      function appendTreeMove(container, node, ply) {
+        const token = document.createElement("button");
+        token.type = "button";
+        token.className = "analysis-tree-move";
+        token.classList.toggle("active", currentNode === node);
+        token.dataset.nodeId = node.id;
+        const moveNo = Math.floor((ply - 1) / 2) + 1;
+        const prefix = node.move.color === "w" ? moveNo + "." : (ply === 1 ? moveNo + "..." : "");
+        token.textContent = (prefix ? prefix + " " : "") + node.move.san;
+        token.setAttribute("aria-label", "Ход " + node.move.san);
+        token.addEventListener("click", () => goToMoveNode(node));
+        container.appendChild(token);
+      }
 
-      list.appendChild(row);
+      function renderTreeLine(parent, ply, line) {
+        if (!parent.children.length) return;
+        const main = parent.children[0];
+        appendTreeMove(line, main, ply);
 
+        // Side branches are shown as separate indented lines attached to
+        // the position before the main continuation.
+        for (let i = 1; i < parent.children.length; i++) {
+          const variation = parent.children[i];
+          const branch = document.createElement("div");
+          branch.className = "analysis-tree-variation";
+          const label = document.createElement("span");
+          label.className = "analysis-tree-branch-label";
+          label.textContent = "Вариант";
+          branch.appendChild(label);
+          appendTreeMove(branch, variation, ply);
+          renderTreeLine(variation, ply + 1, branch);
+          line.appendChild(branch);
+        }
+
+        renderTreeLine(main, ply + 1, line);
+      }
+
+      const mainLine = document.createElement("div");
+      mainLine.className = "analysis-tree-line";
+      renderTreeLine(moveTree.root, 1, mainLine);
+      treeRoot.appendChild(mainLine);
+      list.appendChild(treeRoot);
+      const active = list.querySelector(".analysis-tree-move.active");
+      if (active) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+      return;
     }
 
+    if (!moveTree.root.children.length) {
+      list.innerHTML = '<div class="empty">Moves will appear here.</div>';
+      return;
+    }
 
+    const fragment = document.createDocumentFragment();
 
-    const active = list.querySelector(".active");
+    function appendMove(target, node, ply, forceNumber) {
+      const move = node.move;
+      const number = Math.floor((ply - 1) / 2) + 1;
+      if (move.color === "w") target.appendChild(document.createTextNode(number + ". "));
+      else if (forceNumber) target.appendChild(document.createTextNode(number + "... "));
 
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "move-cell move-tree-cell";
+      button.textContent = move.san;
+      button.dataset.nodeId = node.id;
+      button.classList.toggle("active", currentNode === node);
+      button.setAttribute("aria-label", "Ход " + move.san);
+      button.addEventListener("click", () => goToMoveNode(node));
+      target.appendChild(button);
+    }
 
+    function renderSequence(parent, ply, target) {
+      if (!parent.children.length) return;
+      const main = parent.children[0];
+      const alternatives = parent.children.slice(1);
 
+      appendMove(target, main, ply, false);
+
+      alternatives.forEach(alternative => {
+        target.appendChild(document.createTextNode(" "));
+        const group = document.createElement("span");
+        group.className = "move-variation";
+        group.appendChild(document.createTextNode("("));
+        appendMove(group, alternative, ply, true);
+        if (alternative.children.length) {
+          group.appendChild(document.createTextNode(" "));
+          renderSequence(alternative, ply + 1, group);
+        }
+        group.appendChild(document.createTextNode(")"));
+        target.appendChild(group);
+      });
+
+      if (main.children.length) {
+        target.appendChild(document.createTextNode(" "));
+        renderSequence(main, ply + 1, target);
+      }
+    }
+
+    renderSequence(moveTree.root, 1, fragment);
+    list.appendChild(fragment);
+
+    const active = list.querySelector(".move-tree-cell.active");
     if (active) {
-      // Scroll only the move list. Element.scrollIntoView() may also scroll
-      // the whole page on mobile browsers, making the chessboard jump away.
       const activeTop = active.offsetTop - list.offsetTop;
       const activeBottom = activeTop + active.offsetHeight;
-      if (activeTop < list.scrollTop) {
-        list.scrollTop = activeTop;
-      } else if (activeBottom > list.scrollTop + list.clientHeight) {
+      if (activeTop < list.scrollTop) list.scrollTop = activeTop;
+      else if (activeBottom > list.scrollTop + list.clientHeight) {
         list.scrollTop = activeBottom - list.clientHeight;
       }
     }
-
   }
 
-
-
-  // ---------- Status and navigation ----------
+    // ---------- Status and navigation ----------
 
 
 
@@ -2676,7 +2504,6 @@ square.addEventListener("click", event => {
     if ($("moveCounter")) {
 
       $("moveCounter").textContent = cursor === 0
-
         ? "Start position"
 
         : `Move ${Math.ceil(cursor / 2)} of ${Math.ceil(history.length / 2)}`;
@@ -2810,412 +2637,233 @@ square.addEventListener("click", event => {
 
 
   function buildPgn() {
-
     const m = metaFromInputs();
-
-
-
-    const date = m.date
-
-      ? m.date.replaceAll("-", ".")
-
-      : "????.??.??";
-
-
-
+    const date = m.date ? m.date.replaceAll("-", ".") : "????.??.??";
     const headers = [
-
-      ["Event", m.event],
-
-      ["Site", "?"],
-
-      ["Date", date],
-
-      ["Round", "?"],
-
-      ["White", m.white],
-
-      ["Black", m.black],
-
-      ["Result", gameResult()]
-
+      ["Event", m.event], ["Site", "?"], ["Date", date], ["Round", "?"],
+      ["White", m.white], ["Black", m.black], ["Result", gameResult()]
     ];
-
-
-
     if (m.whiteElo) headers.push(["WhiteElo", m.whiteElo]);
-
     if (m.blackElo) headers.push(["BlackElo", m.blackElo]);
 
-
-
     const headerText = headers.map(([key, value]) => {
-
-      const safeValue = String(value).replaceAll("\\\\", "\\\\\\\\")
-
-        .replaceAll('"', '\\\\"');
-
-
-
-      return `[${key} "${safeValue}"]`;
-
+      const safeValue = String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+      return "[" + key + ' "' + safeValue + '"]';
     }).join("\n");
 
-
-
-    // Turn all stored lines into a move tree.
-
-    const root = { move: null, children: [] };
-
-
-
-    for (const line of lines) {
-
-      let parent = root;
-
-
-
-      for (const move of line.moves) {
-
-        let node = parent.children.find(child =>
-
-          sameMove(child.move, move)
-
-        );
-
-
-
-        if (!node) {
-
-          node = { move, children: [] };
-
-          parent.children.push(node);
-
-        }
-
-
-
-        parent = node;
-
-      }
-
-    }
-
-
-
-    function token(move, ply, forceNumber) {
-
-      const number = Math.ceil(ply / 2);
-
-
-
-      if (move.color === "w") {
-
-        return `${number}. ${move.san}`;
-
-      }
-
-
-
-      return forceNumber ? `${number}... ${move.san}` : move.san;
-
-    }
-
-
+    const formatMove = (move, ply, forceNumber) => {
+      const number = Math.floor((ply - 1) / 2) + 1;
+      if (move.color === "w") return number + ". " + move.san;
+      return forceNumber ? number + "... " + move.san : move.san;
+    };
 
     function emit(parent, ply) {
-
       if (!parent.children.length) return "";
-
-
-
       const main = parent.children[0];
-
-      let text = token(main.move, ply, false);
-
-
-
-      for (const alt of parent.children.slice(1)) {
-
-        const variation =
-
-          token(alt.move, ply, true) + emit(alt, ply + 1);
-
-
-
-        text += ` (${variation.trim()})`;
-
+      let output = formatMove(main.move, ply, false);
+      for (const alternative of parent.children.slice(1)) {
+        const continuationInVariation = emit(alternative, ply + 1);
+        const variation = formatMove(alternative.move, ply, true) +
+          (continuationInVariation ? " " + continuationInVariation : "");
+        output += " (" + variation + ")";
       }
-
-
-
       const continuation = emit(main, ply + 1);
-
-
-
-      if (continuation) text += " " + continuation;
-
-
-
-      return text;
-
+      if (continuation) output += " " + continuation;
+      return output;
     }
 
-
-
-    return headerText + "\n\n" + emit(root, 1).trim() +
-
-      " " + gameResult();
-
+    const moveText = emit(moveTree.root, 1).trim() + " " + gameResult();
+    // Store the game description as a standard PGN brace comment at the end.
+    // Braces inside the description are converted to parentheses to keep PGN valid.
+    const notes = String(m.notes || "").trim().replace(/[{}]/g, char => char === "{" ? "(" : ")");
+    return headerText + "\n\n" + moveText + (notes ? "\n\n{" + notes + "}" : "");
   }
 
+    function parsePgnToTree(pgnText) {
+    const headers = {};
+    const headerPattern = /^\s*\[([A-Za-z0-9_]+)\s+"((?:\\.|[^"])*)"\]\s*$/gm;
+    let body = String(pgnText || "").replace(headerPattern, (_, key, value) => {
+      headers[key] = value.replace(/\\(["\\])/g, "$1");
+      return " ";
+    });
+    // PGN brace comments are collected as the game's description before being
+    // removed from the movetext parser.
+    const comments = [];
+    body = body.replace(/\{([\s\S]*?)\}/g, (_, comment) => {
+      const text = comment.trim();
+      if (text) comments.push(text);
+      return " ";
+    }).replace(/;[^\r\n]*/g, " ");
+    body = body.replace(/\(/g, " ( ").replace(/\)/g, " ) ");
+    const tokens = body.match(/\(|\)|[^\s]+/g) || [];
+    const tree = new window.ChessStudyMoveTree();
+    let node = tree.root;
+    let parser = new Chess();
+    const stack = [];
 
+    const restorePosition = target => {
+      parser = new Chess();
+      for (const move of tree.getPath(target)) {
+        const restored = parser.move({
+          from: move.from, to: move.to, promotion: move.promotion || "q"
+        });
+        if (!restored) throw new Error("Не удалось восстановить позицию при разборе PGN");
+      }
+    };
+
+    for (const raw of tokens) {
+      if (raw === "(") {
+        if (!node || node === tree.root || !node.parent) throw new Error("Некорректное начало варианта PGN");
+        stack.push(node);
+        node = node.parent;
+        restorePosition(node);
+        continue;
+      }
+      if (raw === ")") {
+        if (!stack.length) throw new Error("Лишняя закрывающая скобка в PGN");
+        node = stack.pop();
+        restorePosition(node);
+        continue;
+      }
+
+      let san = raw.replace(/^\d+\.(?:\.\.)?/, "");
+      if (!san || /^\$\d+$/.test(san) ||
+          /^(1-0|0-1|1\/2-1\/2|\*)$/.test(san)) continue;
+      if (/^(e\.p\.|!?|\?+|!+)$/.test(san)) continue;
+      san = san.replace(/[!?]+$/, "");
+
+      let move = null;
+      try { move = parser.move(san, { sloppy: true }); } catch {}
+      if (!move && /[+#]$/.test(san)) {
+        try { move = parser.move(san.replace(/[+#]+$/, ""), { sloppy: true }); } catch {}
+      }
+      if (!move) throw new Error("Не удалось распознать ход PGN: " + san);
+
+      const recorded = tree.addMove(node, move);
+      node = recorded.node;
+    }
+
+    if (stack.length) throw new Error("Не закрыты скобки варианта в PGN");
+    return { tree, headers, comments };
+  }
 
   function importPgnText(text) {
-    game = new Chess();
-
-    if (!game.load_pgn(text)) {
-      notify("PGN could not be loaded. Check the file format.");
+    let parsed;
+    try {
+      parsed = parsePgnToTree(text);
+    } catch (error) {
+      console.error("PGN import error:", error);
+      notify(error.message || "PGN could not be loaded. Check the file format.");
       return;
     }
 
-
-
-    history = game.history({ verbose: true });
-
-
-
-    lines = [{
-
-      id: "main",
-
-      name: "Основная линия",
-
-      moves: history
-
-    }];
-
-
-
-    currentLineId = "main";
-
-    variationNumber = 1;
-
+    moveTree = parsed.tree;
+    activeLeaf = moveTree.mainLeafFrom(moveTree.root);
+    currentNode = activeLeaf;
+    history = moveTree.getPath(activeLeaf);
     cursor = history.length;
-
+    branchCreationMode = false;
+    analysisViewMode = false;
     currentId = null;
-
     arrows = [];
 
-
-
-    const h = game.header();
-
-    const validDate =
-
-      h.Date && /^\d{4}\.\d{2}\.\d{2}$/.test(h.Date);
-
-
-
+    const h = parsed.headers;
+    const validDate = h.Date && /^\d{4}\.\d{2}\.\d{2}$/.test(h.Date);
     loadMeta({
-
       white: h.White || "White",
-
       black: h.Black || "Black",
-
       whiteElo: h.WhiteElo || "",
-
       blackElo: h.BlackElo || "",
-
       event: h.Event || "Imported game",
-
       date: validDate ? h.Date.replaceAll(".", "-") : "",
-
-      notes: ""
-
+      notes: (parsed.comments || []).join("\n\n")
     });
 
-
-
     goTo(history.length);
-
-    notify("PGN imported");
-
+    notify("PGN imported with variations");
   }
 
-
-
-  // ---------- Save / load / database ----------
+    // ---------- Save / load / database ----------
 
 
 
   function saveGame() {
-
     const m = metaFromInputs();
-
     const games = readGames();
-
-
-
+    const flattened = moveTree.toLines();
     const item = {
-
-      id: currentId ||
-
-        ("g" + Date.now() + Math.random().toString(16).slice(2, 7)),
-
+      id: currentId || ("g" + Date.now() + Math.random().toString(16).slice(2, 7)),
       ...m,
-
       pgn: buildPgn(),
-
-      lines: lines.map(line => ({
-
-        id: line.id,
-
-        name: line.name,
-
-        moves: line.moves.map(move => ({ ...move }))
-
+      moveTree: moveTree.serialize(),
+      activePath: moveTree.getPath(activeLeaf),
+      activeCursor: cursor,
+      lines: flattened.map((moves, index) => ({
+        id: index === 0 ? "main" : "variation-" + index,
+        name: index === 0 ? "Основная линия" : "Вариант " + index,
+        moves: moves.map(move => ({ ...move }))
       })),
-
-      activeLineId: currentLineId,
-
+      activeLineId: "main",
       updatedAt: new Date().toISOString(),
-
       plies: history.length
-
     };
 
-
-
     const idx = games.findIndex(g => g.id === item.id);
-
-
-
     if (idx >= 0) games[idx] = item;
-
     else games.unshift(item);
 
-
-
     writeGames(games);
-
     currentId = item.id;
-
     renderSavedGames();
-
     notify("Game and variations saved");
-
   }
 
-
-
-  function openSaved(id) {
-
+    function openSaved(id) {
     const item = readGames().find(g => g.id === id);
-
     if (!item) return;
 
-
-
-    const temp = new Chess();
-
-
-
-    if (!temp.load_pgn(item.pgn)) {
-
-      notify("Could not read this PGN");
-
-      return;
-
+    let parsedPgn = null;
+    if (item.pgn) {
+      try { parsedPgn = parsePgnToTree(item.pgn); }
+      catch (error) { console.warn("Saved PGN tree parse failed:", error); }
     }
 
-
-
-    if (Array.isArray(item.lines) && item.lines.length) {
-
-      lines = item.lines.map(line => ({
-
-        id: line.id,
-
-        name: line.name,
-
-        moves: line.moves.map(move => ({ ...move }))
-
-      }));
-
-
-
-      if (!lines.some(line => line.id === "main")) {
-
-        lines.unshift({
-
-          id: "main",
-
-          name: "Основная линия",
-
-          moves: []
-
-        });
-
-      }
-
-
-
-      currentLineId = lines.some(line => line.id === item.activeLineId)
-
-        ? item.activeLineId
-
-        : "main";
-
-
-
-      variationNumber =
-
-        lines.filter(line => line.id !== "main").length + 1;
-
+    if (item.moveTree) {
+      moveTree = window.ChessStudyMoveTree.fromSerialized(item.moveTree);
+    } else if (Array.isArray(item.lines) && item.lines.length) {
+      moveTree = window.ChessStudyMoveTree.fromLegacyLines(item.lines);
+    } else if (parsedPgn) {
+      moveTree = parsedPgn.tree;
     } else {
-
-      // Compatibility with games saved by the original version.
-
-      lines = [{
-
-        id: "main",
-
-        name: "Основная линия",
-
-        moves: temp.history({ verbose: true })
-
-      }];
-
-
-
-      currentLineId = "main";
-
-      variationNumber = 1;
-
+      const temp = new Chess();
+      if (!temp.load_pgn(item.pgn || "")) {
+        notify("Could not read this PGN");
+        return;
+      }
+      moveTree = new window.ChessStudyMoveTree(temp.history({ verbose: true }));
     }
 
+    let restoredNode = null;
+    if (Array.isArray(item.activePath)) restoredNode = moveTree.atPath(item.activePath);
+    if (!restoredNode && Array.isArray(item.lines) && item.activeLineId) {
+      const oldLine = item.lines.find(line => line.id === item.activeLineId);
+      if (oldLine) restoredNode = moveTree.atPath(oldLine.moves || []);
+    }
 
-
-    history = getLine().moves;
-
+    activeLeaf = moveTree.mainLeafFrom(restoredNode || moveTree.root);
+    currentNode = activeLeaf;
+    history = moveTree.getPath(activeLeaf);
+    cursor = Math.max(0, Math.min(Number(item.activeCursor ?? history.length), history.length));
+    branchCreationMode = false;
     currentId = item.id;
-
     arrows = [];
 
-
-
     loadMeta(item);
-
-    goTo(history.length);
-
+    goTo(cursor);
     notify("Game loaded");
-
   }
 
-
-
-  function renderSavedGames() {
+    function renderSavedGames() {
 
     const games = readGames();
 
@@ -3366,8 +3014,7 @@ square.addEventListener("click", event => {
   function resetGame() {
     engineGameEnded = false;
     pendingPromotion = null;
-    if ($("promotionModal")) $("promotionModal").hidden = true;
-    renderEvaluation(0);
+    if ($("promotionModal")) $("promotionModal").hidden = true;    renderEvaluation(0);
     engineAnalysisOnly = false;
 
     if (engineMode) stopEngineSearch();
@@ -3375,23 +3022,12 @@ square.addEventListener("click", event => {
 
 
 
-    lines = [{
-
-      id: "main",
-
-      name: "Основная линия",
-
-      moves: []
-
-    }];
-
-
-
-    currentLineId = "main";
-
+    moveTree = new window.ChessStudyMoveTree();
+    activeLeaf = moveTree.root;
+    currentNode = moveTree.root;
     history = [];
-
     cursor = 0;
+    branchCreationMode = false;
 
 
 
@@ -3402,11 +3038,6 @@ square.addEventListener("click", event => {
     currentId = null;
 
     arrows = [];
-
-    variationNumber = 1;
-
-
-
     loadMeta({
 
       white: "White",
@@ -3468,16 +3099,40 @@ square.addEventListener("click", event => {
 
   function installEvents() {
     const analyzeButton = $("analyzeBtn");
-    if (analyzeButton) analyzeButton.addEventListener("click", analyzeGameGraph);
+    if (analyzeButton) analyzeButton.addEventListener("click", () => analyzeGameGraph());
 
     // Unlock browser audio on the first genuine user interaction so that
     // Stockfish replies can also produce sounds later in the game.
     document.addEventListener("pointerdown", unlockChessAudio);
     const engineModal = $("engineModal");
     const settingsModal = $("settingsModal");
+    const detailsModal = $("detailsModal");
+    const gamesModal = $("gamesModal");
+    const gamesButton = $("myGamesOpenBtn");
+    const closeGamesPopover = () => {
+      gamesModal.hidden = true;
+      gamesButton.setAttribute("aria-expanded", "false");
+    };
+    gamesButton.addEventListener("click", () => {
+      const opening = gamesModal.hidden;
+      gamesModal.hidden = !opening;
+      gamesButton.setAttribute("aria-expanded", String(opening));
+      if (opening) { renderSavedGames(); $("searchInput").focus(); }
+    });
+    $("gamesModalCloseBtn").addEventListener("click", closeGamesPopover);
+    document.addEventListener("pointerdown", event => {
+      if (!gamesModal.hidden && !gamesModal.contains(event.target) && !gamesButton.contains(event.target)) closeGamesPopover();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !gamesModal.hidden) closeGamesPopover();
+    });
     $("settingsModalOpenBtn").addEventListener("click", () => { settingsModal.hidden = false; });
     $("settingsModalCloseBtn").addEventListener("click", () => { settingsModal.hidden = true; });
     settingsModal.addEventListener("click", event => { if (event.target === settingsModal) settingsModal.hidden = true; });
+    $("detailsModalOpenBtn").addEventListener("click", () => { detailsModal.hidden = false; $("whiteInput").focus(); });
+    $("partyCommentsEditBtn").addEventListener("click", () => { detailsModal.hidden = false; $("notesInput").focus(); });
+    $("detailsModalCloseBtn").addEventListener("click", () => { detailsModal.hidden = true; });
+    detailsModal.addEventListener("click", event => { if (event.target === detailsModal) detailsModal.hidden = true; });
     $("themeSelect").addEventListener("change", event => {
       appearanceSettings.theme = event.target.value; applyAppearanceSettings(); saveAppearanceSettings();
     });
@@ -3527,6 +3182,8 @@ square.addEventListener("click", event => {
       if (event.key === "Escape") {
         settingsModal.hidden = true;
         engineModal.hidden = true;
+        detailsModal.hidden = true;
+        if (gamesModal) gamesModal.hidden = true;
       }
     });
     $("engineModalOpenBtn").addEventListener("click", () => { engineModal.hidden = false; });

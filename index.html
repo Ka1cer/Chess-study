@@ -4,13 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Chess Study — Personal Chess Database</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
   <script>if (typeof Chess === "undefined") document.write('<script src="https://cdn.jsdelivr.net/npm/chess.js@0.10.3/chess.min.js"><\/script>');</script>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><span class="brand-mark">♞</span><span>Chess Study</span></div>
+  <div class="brand-group">
+    <div class="brand"><span class="brand-mark">♞</span><span>Chess Study</span></div>
+    <button id="myGamesOpenBtn" class="btn ghost my-games-nav-btn" type="button" aria-expanded="false">My games</button>
+    <div id="gamesModal" class="games-modal" hidden>
+      <section class="database-panel panel games-dialog" role="dialog" aria-modal="false" aria-labelledby="gamesDialogTitle">
+        <div class="games-popover-heading"><h2 id="gamesDialogTitle">My games</h2><div class="games-dialog-actions"><span class="subtle" id="gameCount">0 saved</span><button id="gamesModalCloseBtn" class="icon-btn" type="button" aria-label="Close">×</button></div></div>
+        <div class="db-tools"><input id="searchInput" placeholder="Search players, event, notes…"><button id="backupBtn" class="btn ghost compact">Backup</button><input id="backupInput" type="file" accept=".json" hidden></div>
+        <div id="savedGames" class="saved-games"><div class="empty">No saved games yet.</div></div>
+      </section>
+    </div>
+  </div>
   <div class="top-actions">
     <button id="newGameBtn" class="btn ghost">New game</button>
     <button id="engineModalOpenBtn" class="btn primary">Play vs Stockfish</button>
@@ -25,16 +36,14 @@
     <div class="section-title"><h2>Инструменты</h2></div>
     <div class="tools-actions">
       <button id="analyzeBtn" class="btn primary full" type="button">Анализировать</button>
+      <button id="detailsModalOpenBtn" class="btn ghost full" type="button">Game Details</button>
+      <button id="flipBtn" class="btn ghost full" type="button" title="Перевернуть доску" aria-label="Перевернуть доску">⇅ Перевернуть доску</button>
       <button id="resignBtn" class="resign-btn full" type="button" hidden>Сдаться</button>
     </div>
     <p class="tools-note">Дополнительные инструменты появятся здесь.</p>
   </aside>
 
   <section class="board-panel panel">
-    <div class="game-heading">
-      <div><div class="eyebrow">ANALYSIS BOARD</div><h1 id="gameTitle">Untitled game</h1><p id="gameMeta">White vs Black · Casual game</p></div>
-      <button id="flipBtn" class="icon-btn" title="Flip board" aria-label="Flip board">⇅</button>
-    </div>
     <div class="board-workspace">
       <div class="evaluation-wrap" aria-label="Stockfish evaluation">
         <div class="evaluation-bar" id="evaluationBar"><div class="eval-black" id="evalBlack"></div><div class="eval-white" id="evalWhite"></div><div class="eval-center"></div></div>
@@ -50,30 +59,39 @@
         <div id="status" class="status">White to move</div>
       </div>
     </div>
+    <div class="game-heading">
+      <div><div class="eyebrow">ДЕТАЛИ ПАРТИИ</div><h1 id="gameTitle">Untitled game</h1><p id="gameMeta">White vs Black · Casual game</p></div>
+    </div>
   </section>
 
   <aside class="moves-panel panel">
     <div class="section-title"><h2>Moves</h2><span class="subtle">English notation · SAN</span></div>
     <div id="moveList" class="move-list"><div class="empty">Moves will appear here.</div></div>
+    <section class="party-comments panel" aria-labelledby="partyCommentsTitle">
+      <div class="party-comments-heading">
+        <h3 id="partyCommentsTitle"><span aria-hidden="true">▤</span> Комментарии к партии</h3>
+        <button id="partyCommentsEditBtn" class="icon-btn party-comments-edit" type="button" title="Открыть Game Details" aria-label="Редактировать комментарии">↗</button>
+      </div>
+      <div id="partyCommentsText" class="party-comments-text" tabindex="0">Комментариев пока нет.</div>
+    </section>
   </aside>
 
-  <section class="details-panel panel">
-    <div class="section-title"><h2>Game details</h2><span class="subtle">Edit metadata</span></div>
-    <div class="details-grid">
-      <label>White <input id="whiteInput" value="White" maxlength="80"></label>
-      <label>Black <input id="blackInput" value="Black" maxlength="80"></label>
-      <label>Event <input id="eventInput" value="Casual game" maxlength="100"></label>
-      <label>Date <input id="dateInput" type="date"></label>
-      <label class="notes-field">Opening / notes <textarea id="notesInput" rows="2" placeholder="Opening name, ideas, mistakes..."></textarea></label>
-      <div class="save-field"><button id="saveBtn" class="btn primary full">Save to my database</button><div class="small-note">Games are stored in this browser on this device (localStorage).</div></div>
-    </div>
-  </section>
+  <div id="detailsModal" class="modal-backdrop" hidden>
+    <section class="details-dialog panel" role="dialog" aria-modal="true" aria-labelledby="detailsDialogTitle">
+      <div class="section-title"><h2 id="detailsDialogTitle">Game Details</h2><button id="detailsModalCloseBtn" class="icon-btn" type="button" aria-label="Close">×</button></div>
+      <section class="details-panel">
+        <div class="details-grid">
+          <label>White <input id="whiteInput" value="White" maxlength="80"></label>
+          <label>Black <input id="blackInput" value="Black" maxlength="80"></label>
+          <label>Event <input id="eventInput" value="Casual game" maxlength="100"></label>
+          <label>Date <input id="dateInput" type="date"></label>
+          <label class="notes-field">Opening / notes <textarea id="notesInput" rows="2" placeholder="Opening name, ideas, mistakes..."></textarea></label>
+          <div class="save-field"><button id="saveBtn" class="btn primary full">Save to my database</button><div class="small-note">Games are stored in this browser on this device (localStorage).</div></div>
+        </div>
+      </section>
+    </section>
+  </div>
 
-  <section class="database-panel panel">
-    <div class="section-title"><h2>My games</h2><span class="subtle" id="gameCount">0 saved</span></div>
-    <div class="db-tools"><input id="searchInput" placeholder="Search players, event, notes…"><button id="backupBtn" class="btn ghost compact">Backup</button><input id="backupInput" type="file" accept=".json" hidden></div>
-    <div id="savedGames" class="saved-games"><div class="empty">No saved games yet.</div></div>
-  </section>
 </main>
 <div id="engineModal" class="modal-backdrop" hidden>
   <section class="engine-dialog panel" role="dialog" aria-modal="true" aria-labelledby="engineDialogTitle">
@@ -115,6 +133,7 @@
   </section>
 </div>
 <div id="toast" class="toast" role="status"></div>
+<script src="move-tree.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -368,3 +368,610 @@ body.light-theme.liquid-glass select { background: rgba(245,248,252,.38); }
   .details-panel, .database-panel { grid-column: 1; grid-row: auto; }
   #evaluationGraphCanvas { height: 175px; }
 }
+
+
+/* v3.2 Move Widget — compact inline notation and variation branches */
+.move-list.move-tree-list {
+  display: block;
+  white-space: normal;
+  line-height: 2.1;
+  padding: 12px 13px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.move-tree-list .move-tree-cell {
+  display: inline;
+  min-width: 0;
+  padding: 2px 4px;
+  margin: 0 1px;
+  line-height: 1.7;
+  font-size: 13px;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.move-tree-list .move-tree-cell.active {
+  background: var(--green, #81b64c);
+  color: #172012;
+  border-radius: 4px;
+}
+.move-variation {
+  display: inline;
+  padding: 0 1px;
+  color: var(--muted);
+  border-radius: 4px;
+  background: rgba(128, 128, 128, .08);
+  white-space: normal;
+}
+.chess-variation-tools button.is-armed {
+  border-color: var(--green, #81b64c);
+  color: var(--green2, #9bd77e);
+}
+body.light-theme .move-variation { background: rgba(90, 110, 130, .08); }
+
+
+
+
+/* v3.2.2 — floating Analysis Board with centered board and wider Moves */
+@media (min-width: 901px) {
+  .layout {
+    max-width: 1760px;
+    grid-template-columns: minmax(150px, 180px) minmax(0, 1fr) minmax(390px, 440px);
+    gap: 14px;
+  }
+
+  /* The Analysis Board is a transparent stage, not a visible card. */
+  .board-panel.panel {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    overflow: visible;
+    padding: 0 4px;
+  }
+  .board-panel.panel::before { display: none !important; }
+
+  /* Keep the board centered in its own stage. */
+  .board-panel .game-heading { padding: 0 8px; }
+  .board-panel .board-workspace {
+    justify-content: center;
+    gap: 12px;
+    transform: none;
+  }
+  .board-panel .board-column {
+    width: min(100%, min(66vh, 650px));
+  }
+
+  /* Player labels remain as small floating Liquid Glass chips. */
+  .board-panel .player-row {
+    min-height: 42px;
+    margin: 5px 0;
+    padding: 7px 11px;
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 10px;
+    background: rgba(28,35,43,.42);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 5px 18px rgba(0,0,0,.10);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+  }
+  body.liquid-glass .board-panel .player-row {
+    background: rgba(34,40,48,calc(var(--glass-alpha) * .82));
+    border-color: rgba(255,255,255,.18);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    backdrop-filter: blur(20px) saturate(150%);
+  }
+
+  /* Nudge the flip control toward the newly freed central space. */
+  .board-panel #flipBtn {
+    margin-right: 10px;
+    transform: translateX(-12px);
+  }
+
+  .moves-panel { padding: 18px; }
+  .moves-panel .move-list {
+    height: calc(min(66vh,620px) + 95px);
+  }
+}
+@media (max-width: 1150px) and (min-width: 901px) {
+  .layout {
+    grid-template-columns: minmax(135px,160px) minmax(0,1fr) minmax(330px,370px);
+    gap: 12px;
+  }
+  .board-panel .board-column { width: min(100%,56vh); }
+}
+@media (max-width: 900px) {
+  /* Keep the compact panel on narrow screens for clear separation. */
+  .board-panel.panel {
+    background: var(--panel);
+    border: 1px solid #393631;
+    box-shadow: 0 6px 20px #00000012;
+    padding: 14px;
+  }
+  .board-panel .board-workspace { justify-content: center; transform: none; }
+  .board-panel .player-row { border-radius: 8px; }
+}
+body.light-theme .board-panel .player-row {
+  background: rgba(255,255,255,.48);
+  border-color: rgba(50,60,75,.14);
+}
+
+
+/* v3.2.3 — preserve board scale, isolate glass widgets, position flip control */
+@media (min-width: 901px) {
+  /* Keep the original board footprint; only remove the surrounding card. */
+  .board-panel .board-column {
+    width: min(100%, min(72.7056vh, 716px)) !important;
+    flex: 0 1 auto;
+  }
+  .board-panel .board-workspace {
+    justify-content: center !important;
+    gap: 12px;
+    transform: none !important;
+  }
+
+  /* The flip button sits just to the right of the board, not at the far edge. */
+  .board-panel #flipBtn {
+    transform: translateX(-82px) !important;
+    margin-right: 0;
+  }
+
+  /* Use the available right-side room for the Move Widget without changing text sizing. */
+  .layout {
+    grid-template-columns: minmax(150px,180px) minmax(0,1fr) minmax(420px,470px);
+  }
+}
+@media (max-width: 1150px) and (min-width: 901px) {
+  .board-panel .board-column {
+    width: min(100%, min(64vh, 620px)) !important;
+  }
+}
+
+/* Analysis Board is a transparent stage in every theme/glass setting.
+   Liquid Glass remains enabled for Tools, Moves and player name chips. */
+body.liquid-glass .board-panel,
+body.liquid-glass .board-panel.panel,
+body.light-theme.liquid-glass .board-panel,
+body.light-theme.liquid-glass .board-panel.panel {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+body.liquid-glass .board-panel::before,
+body.light-theme.liquid-glass .board-panel::before {
+  display: none !important;
+}
+
+
+/* v3.2.4 — My games header button and floating library dialog */
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+.my-games-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255,255,255,.17);
+  border-radius: 9px;
+  color: var(--text);
+  background: rgba(255,255,255,.09);
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+  transition: background .16s, border-color .16s, transform .16s;
+}
+.my-games-nav-btn:hover {
+  background: rgba(255,255,255,.16);
+  border-color: rgba(255,255,255,.28);
+}
+.my-games-nav-btn:active { transform: translateY(1px); }
+body.liquid-glass .my-games-nav-btn {
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.18);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.games-modal {
+  z-index: 25;
+  background: rgba(5,9,15,.62);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+}
+.games-dialog {
+  width: min(720px, 94vw);
+  max-height: min(82vh, 760px);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 22px 80px rgba(0,0,0,.42);
+}
+.games-dialog .section-title { flex: 0 0 auto; }
+.games-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.games-dialog .db-tools { flex: 0 0 auto; }
+.games-dialog .saved-games {
+  max-height: none;
+  min-height: 100px;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding-right: 3px;
+}
+body.liquid-glass .games-dialog {
+  background: rgba(30,36,44,var(--glass-alpha));
+  border-color: rgba(255,255,255,.17);
+  -webkit-backdrop-filter: blur(var(--glass-blur,22px)) saturate(145%);
+  backdrop-filter: blur(var(--glass-blur,22px)) saturate(145%);
+}
+@media(max-width:600px) {
+  .brand-group { width: 100%; justify-content: space-between; gap: 10px; }
+  .my-games-nav-btn { min-height: 34px; padding: 7px 11px; font-size: 12px; }
+  .games-dialog { padding: 13px; width: 96vw; }
+}
+
+
+/* v3.2.5 — readable move tree, centered My games dialog, refined spacing */
+#moveList.move-tree-list {
+  display: block;
+  padding: 14px 12px;
+  overflow: auto;
+  color: var(--text);
+  line-height: 1.8;
+  font-size: 14px;
+}
+.analysis-tree,
+.analysis-tree-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 4px;
+  min-width: 0;
+}
+.analysis-tree-move {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent !important;
+  color: var(--text) !important;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.analysis-tree-move:hover {
+  background: rgba(255,255,255,.09) !important;
+  border-color: var(--line);
+}
+.analysis-tree-move.active {
+  background: var(--green) !important;
+  border-color: var(--green);
+  color: #14200e !important;
+}
+.analysis-tree-variation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex-basis: 100%;
+  margin: 3px 0 3px 15px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--green);
+  border-radius: 0 7px 7px 0;
+  background: rgba(255,255,255,.035);
+}
+.analysis-tree-branch-label {
+  color: var(--green2);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-right: 3px;
+}
+.analysis-view-exit { margin-left: auto; }
+
+#myGamesOpenBtn.my-games-nav-btn {
+  min-height: 40px;
+  padding: 9px 13px;
+  font-size: 13px;
+  font-weight: 750;
+}
+.games-modal {
+  display: grid;
+  place-items: start center;
+  padding: clamp(28px, 7vh, 76px) 18px 18px;
+  overflow-y: auto;
+}
+.games-dialog {
+  margin: 0 auto;
+  width: min(760px, 94vw);
+  max-height: min(78vh, 720px);
+}
+.board-panel .player-row { margin-bottom: 13px; }
+.board-panel .board-column .player-row + .board-workspace { margin-top: 8px; }
+@media(max-width:900px) {
+  #moveList.move-tree-list { padding: 10px; }
+  .games-modal { padding-top: 24px; }
+  .games-dialog { max-height: 84vh; }
+}
+
+
+
+
+
+
+/* v3.2.8 — keep My games dropdown in the header; change only its glass appearance */
+.brand-group { position: relative; }
+#myGamesOpenBtn.my-games-nav-btn {
+  /* Keep the same standard ghost-button appearance as New game / Import / Export. */
+  background: inherit;
+  border-color: inherit;
+  box-shadow: none;
+}
+body.liquid-glass #myGamesOpenBtn.my-games-nav-btn {
+  background: rgba(255,255,255,.09);
+  border-color: rgba(255,255,255,.14);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.games-modal {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 9px);
+  left: 164px;
+  width: min(620px, calc(100vw - 230px));
+  padding: 0;
+  margin: 0;
+  display: block;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.games-modal[hidden] { display: none !important; }
+.games-dialog {
+  width: 100%;
+  max-height: min(66vh,590px);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 16px 44px rgba(0,0,0,.30);
+}
+.games-popover-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.games-popover-heading h2 { margin:0; font-size:15px; }
+.games-dialog .db-tools { flex:0 0 auto; }
+.games-dialog .saved-games { flex:1 1 auto; min-height:60px; max-height:none; overflow:auto; padding-right:2px; }
+body.liquid-glass .games-dialog {
+  background: rgba(34,36,41,var(--glass-alpha));
+  border-color: rgba(255,255,255,.13);
+  box-shadow: 0 12px 38px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.10);
+  -webkit-backdrop-filter: blur(var(--glass-blur,22px)) saturate(calc(100% + var(--glass-strength)*.7%));
+  backdrop-filter: blur(var(--glass-blur,22px)) saturate(calc(100% + var(--glass-strength)*.7%));
+}
+body.liquid-glass .games-dialog::before {
+  content:"";
+  position:absolute;
+  inset:0 0 auto;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,var(--glass-highlight,.12)),transparent);
+  pointer-events:none;
+}
+@media(max-width:700px) { .games-modal { left:0; width:min(94vw,520px); } }
+
+
+/* v3.2.9 — theme-aware My games surface: glass in glass mode, solid in standard themes */
+.games-dialog {
+  position: relative;
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--line);
+  box-shadow: 0 16px 42px rgba(0,0,0,.24);
+}
+/* Dark Liquid Glass: frosted, but opaque enough to keep move titles readable. */
+body.liquid-glass .games-dialog {
+  background: rgba(25,38,53,.86);
+  border-color: rgba(220,235,250,.20);
+  box-shadow: 0 18px 48px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.13);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+}
+/* Light Liquid Glass uses a pale frosted surface instead of the dark glass tint. */
+body.light-theme.liquid-glass .games-dialog {
+  background: rgba(247,250,254,.88);
+  color: #202630;
+  border-color: rgba(255,255,255,.78);
+  box-shadow: 0 18px 48px rgba(34,48,66,.16), inset 0 1px 0 rgba(255,255,255,.88);
+  -webkit-backdrop-filter: blur(28px) saturate(145%);
+  backdrop-filter: blur(28px) saturate(145%);
+}
+body.light-theme.liquid-glass .games-dialog .subtle,
+body.light-theme.liquid-glass .games-dialog .saved-game,
+body.light-theme.liquid-glass .games-dialog .saved-game small {
+  color: #566273;
+}
+body.light-theme.liquid-glass .games-dialog .saved-game {
+  background: rgba(255,255,255,.58);
+  border-color: rgba(95,110,130,.18);
+}
+body:not(.liquid-glass) .games-dialog {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+
+/* v3.2.10 — Game Details lives in Tools and opens as a focused modal. */
+.tools-panel #detailsModalOpenBtn { margin-top: 1px; }
+.details-dialog {
+  width: min(100%, 620px);
+  max-height: min(86vh, 680px);
+  overflow: auto;
+  padding: 20px;
+  box-shadow: 0 18px 70px rgba(0,0,0,.42);
+}
+.details-dialog > .section-title { margin-bottom: 16px; }
+.details-dialog .details-panel {
+  grid-column: auto;
+  grid-row: auto;
+  padding: 0;
+  min-width: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.details-dialog .details-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 14px; }
+.details-dialog .notes-field { grid-column: 1 / -1; }
+.details-dialog .save-field { grid-column: 1 / -1; padding-top: 0; }
+.details-dialog .small-note { margin-top: 7px; }
+body.light-theme .details-dialog { color: var(--text); }
+body.light-theme .details-dialog label { color: #566273; }
+@media(max-width:520px) {
+  .details-dialog { padding: 14px; max-height: 90vh; }
+  .details-dialog .details-grid { grid-template-columns: 1fr; }
+  .details-dialog .notes-field,
+  .details-dialog .save-field { grid-column: 1; }
+}
+
+
+/* v3.2.12 — persistent party comments below the Moves widget */
+.party-comments {
+  margin-top: 14px;
+  padding: 0;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.party-comments-heading {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px 7px 13px;
+  border-bottom: 1px solid var(--line);
+}
+.party-comments-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: -.15px;
+}
+.party-comments-heading h3 span {
+  color: var(--green2);
+  margin-right: 7px;
+}
+.party-comments-edit {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  font-size: 17px;
+  line-height: 1;
+}
+.party-comments-text {
+  max-height: clamp(160px, 25vh, 240px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 13px 14px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  scrollbar-color: var(--green) transparent;
+}
+.party-comments-text.is-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+.party-comments-text::-webkit-scrollbar { width: 6px; }
+.party-comments-text::-webkit-scrollbar-thumb {
+  background: var(--green);
+  border-radius: 8px;
+}
+@media (max-width: 720px) {
+  .party-comments-text { max-height: min(22vh, 190px); }
+}
+
+
+/* v3.2.13 — raise the board and place game heading below it */
+@media (min-width: 901px) {
+  .board-panel.panel { position: relative; }
+  .board-panel .board-flip-control {
+    position: absolute;
+    top: 18px;
+    right: clamp(58px, 8vw, 120px);
+    z-index: 2;
+    margin: 0;
+    transform: none !important;
+  }
+  .board-panel .board-workspace { margin-top: 0; }
+  .board-panel .game-heading {
+    width: min(100%, 680px);
+    margin: 13px auto 0;
+    padding: 0 8px;
+    justify-content: flex-start;
+  }
+  .board-panel .moves-panel { min-height: 0; }
+  .moves-panel .move-list {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: min(52vh, 520px);
+  }
+  .party-comments { margin-top: 14px; }
+}
+@media (max-width: 900px) {
+  .board-panel.panel { position: relative; }
+  .board-panel .board-flip-control {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    z-index: 2;
+  }
+  .board-panel .game-heading {
+    margin: 12px 0 0;
+    padding: 0 4px;
+  }
+  .moves-panel .move-list {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: 48vh;
+  }
+}
+
+
+/* v3.2.14 — move board flip control into Tools and rename game heading */
+.tools-panel #flipBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  margin-top: 0;
+}
+.board-panel .game-heading .eyebrow {
+  letter-spacing: 1.6px;
+}

@@ -978,6 +978,8 @@
     // Keep the full selected continuation available, but show the exact node
     // the user clicked rather than jumping to the end of that continuation.
     goTo(moveTree.getNodePath(node).length);
+    // In analysis mode, recalculate the graph for this selected continuation.
+    if (analysisViewMode) analyzeGameGraph();
   }
 
   function goTo(n) {

@@ -915,3 +915,49 @@ body.light-theme .details-dialog label { color: #566273; }
 @media (max-width: 720px) {
   .party-comments-text { max-height: min(22vh, 190px); }
 }
+
+
+/* v3.2.13 — raise the board and place game heading below it */
+@media (min-width: 901px) {
+  .board-panel.panel { position: relative; }
+  .board-panel .board-flip-control {
+    position: absolute;
+    top: 18px;
+    right: clamp(58px, 8vw, 120px);
+    z-index: 2;
+    margin: 0;
+    transform: none !important;
+  }
+  .board-panel .board-workspace { margin-top: 0; }
+  .board-panel .game-heading {
+    width: min(100%, 680px);
+    margin: 13px auto 0;
+    padding: 0 8px;
+    justify-content: flex-start;
+  }
+  .board-panel .moves-panel { min-height: 0; }
+  .moves-panel .move-list {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: min(52vh, 520px);
+  }
+  .party-comments { margin-top: 14px; }
+}
+@media (max-width: 900px) {
+  .board-panel.panel { position: relative; }
+  .board-panel .board-flip-control {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    z-index: 2;
+  }
+  .board-panel .game-heading {
+    margin: 12px 0 0;
+    padding: 0 4px;
+  }
+  .moves-panel .move-list {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: 48vh;
+  }
+}

@@ -1682,252 +1682,133 @@ square.addEventListener("click", event => {
 
 
   function renderMoves() {
-
     const list = $("moveList");
-
     if (!list) return;
 
-
-
     let tools = $("variationTools");
-
-
-
     if (!tools) {
-
       tools = document.createElement("div");
-
       tools.id = "variationTools";
-
       tools.className = "chess-variation-tools";
-
       list.parentElement.insertBefore(tools, list);
-
     }
-
-
-
     tools.innerHTML = "";
 
-
-
-    const select = document.createElement("select");
-
-    select.setAttribute("aria-label", "Select variation");
-
-
-
-    lines.forEach(line => {
-
-      const option = document.createElement("option");
-
-      option.value = line.id;
-
-      option.textContent =
-
-        `${line.name} · ${Math.ceil(line.moves.length / 2)} ходов`;
-
-      option.selected = line.id === currentLineId;
-
-      select.appendChild(option);
-
-    });
-
-
-
-    select.addEventListener("change", () => {
-
-      currentLineId = select.value;
-
-      goTo(0);
-
-    });
-
-
-
     const addButton = document.createElement("button");
-
     addButton.type = "button";
-
-    addButton.textContent = "+ Вариант";
-
-    addButton.title = "Создать альтернативную линию из текущей позиции";
-
-
-
+    addButton.textContent = branchCreationMode ? "Выберите ход…" : "+ Вариант";
+    addButton.title = "Перейдите к нужной позиции и сыграйте альтернативный ход";
+    addButton.classList.toggle("is-armed", branchCreationMode);
     addButton.addEventListener("click", () => {
-
-      const prefix = history.slice(0, cursor);
-
-      const newLine = {
-
-        id: makeId(),
-
-        name: "Вариант " + variationNumber++,
-
-        moves: prefix.slice()
-
-      };
-
-
-
-      lines.push(newLine);
-
-      currentLineId = newLine.id;
-
-
-
-      arrows = [];
-
-      goTo(cursor);
-
-      notify("Вариант создан");
-
+      branchCreationMode = !branchCreationMode;
+      renderMoves();
+      if (branchCreationMode) notify("Сделайте альтернативный ход на доске");
     });
 
-
+    const branch = findBranchOnActivePath();
+    const promoteButton = document.createElement("button");
+    promoteButton.type = "button";
+    promoteButton.textContent = "Сделать основным";
+    promoteButton.disabled = !branch;
+    promoteButton.title = "Переместить выбранный вариант на первое место";
+    promoteButton.addEventListener("click", () => {
+      const selectedBranch = findBranchOnActivePath();
+      if (!selectedBranch || !moveTree.promoteToMain(selectedBranch)) return;
+      setActiveLeafFromNode(selectedBranch);
+      goTo(cursor);
+      notify("Вариант стал основным");
+    });
 
     const deleteButton = document.createElement("button");
-
     deleteButton.type = "button";
-
     deleteButton.textContent = "Удалить вариант";
-
-    deleteButton.disabled =
-
-      currentLineId === "main" || lines.length <= 1;
-
-
-
+    deleteButton.disabled = !branch;
     deleteButton.addEventListener("click", () => {
-
-      if (currentLineId === "main") {
-
-        notify("Основную линию удалить нельзя");
-
+      const selectedBranch = findBranchOnActivePath();
+      if (!selectedBranch) {
+        notify("Выберите вариант, который нужно удалить");
         return;
-
       }
-
-
-
-      lines = lines.filter(line => line.id !== currentLineId);
-
-      currentLineId = "main";
-
+      const parent = selectedBranch.parent;
+      const parentPly = moveTree.getNodePath(parent).length;
+      moveTree.removeBranch(selectedBranch);
+      setActiveLeafFromNode(parent);
       arrows = [];
-
-
-
-      goTo(getLine().moves.length);
-
+      goTo(parentPly);
       notify("Вариант удалён");
-
     });
 
-
-
-    tools.append(select, addButton, deleteButton);
-
-
-
+    tools.append(addButton, promoteButton, deleteButton);
     list.innerHTML = "";
+    list.classList.add("move-tree-list");
 
-
-
-    if (!history.length) {
-
-      list.innerHTML =
-
-        '<div class="empty">Moves will appear here.</div>';
-
+    if (!moveTree.root.children.length) {
+      list.innerHTML = '<div class="empty">Moves will appear here.</div>';
       return;
-
     }
 
+    const fragment = document.createDocumentFragment();
 
-
-    for (let i = 0; i < history.length; i += 2) {
-
-      const row = document.createElement("div");
-
-      row.className = "move-row";
-
-
-
-      const no = document.createElement("span");
-
-      no.className = "move-no";
-
-      no.textContent = (Math.floor(i / 2) + 1) + ".";
-
-
-
-      const white = document.createElement("button");
-
-      white.className = "move-cell";
-
-      white.textContent = history[i].san;
-
-      white.classList.toggle("active", cursor === i + 1);
-
-      white.addEventListener("click", () => goTo(i + 1));
-
-
-
-      row.append(no, white);
-
-
-
-      if (history[i + 1]) {
-
-        const black = document.createElement("button");
-
-        black.className = "move-cell";
-
-        black.textContent = history[i + 1].san;
-
-        black.classList.toggle("active", cursor === i + 2);
-
-        black.addEventListener("click", () => goTo(i + 2));
-
-        row.appendChild(black);
-
-      } else {
-
-        row.appendChild(document.createElement("span"));
-
+    function appendMove(target, node, ply, forceNumber) {
+      const move = node.move;
+      const number = Math.floor((ply - 1) / 2) + 1;
+      if (move.color === "w") {
+        target.appendChild(document.createTextNode(number + ". "));
+      } else if (forceNumber) {
+        target.appendChild(document.createTextNode(number + "... "));
       }
 
-
-
-      list.appendChild(row);
-
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "move-cell move-tree-cell";
+      button.textContent = move.san;
+      button.dataset.nodeId = node.id;
+      button.classList.toggle("active", currentNode === node);
+      button.setAttribute("aria-label", "Ход " + move.san);
+      button.addEventListener("click", () => goToMoveNode(node));
+      target.appendChild(button);
     }
 
+    function renderSequence(parent, ply, target) {
+      if (!parent.children.length) return;
 
+      const main = parent.children[0];
+      const alternatives = parent.children.slice(1);
 
-    const active = list.querySelector(".active");
+      appendMove(target, main, ply, false);
 
+      alternatives.forEach(alternative => {
+        target.appendChild(document.createTextNode(" "));
+        const group = document.createElement("span");
+        group.className = "move-variation";
+        group.appendChild(document.createTextNode("("));
+        appendMove(group, alternative, ply, true);
+        renderSequence(alternative, ply + 1, group);
+        group.appendChild(document.createTextNode(")"));
+        target.appendChild(group);
+      });
 
+      if (main.children.length) {
+        target.appendChild(document.createTextNode(" "));
+        renderSequence(main, ply + 1, target);
+      }
+    }
 
+    renderSequence(moveTree.root, 1, fragment);
+    list.appendChild(fragment);
+
+    const active = list.querySelector(".move-tree-cell.active");
     if (active) {
-      // Scroll only the move list. Element.scrollIntoView() may also scroll
-      // the whole page on mobile browsers, making the chessboard jump away.
       const activeTop = active.offsetTop - list.offsetTop;
       const activeBottom = activeTop + active.offsetHeight;
-      if (activeTop < list.scrollTop) {
-        list.scrollTop = activeTop;
-      } else if (activeBottom > list.scrollTop + list.clientHeight) {
+      if (activeTop < list.scrollTop) list.scrollTop = activeTop;
+      else if (activeBottom > list.scrollTop + list.clientHeight) {
         list.scrollTop = activeBottom - list.clientHeight;
       }
     }
-
   }
 
-
-
-  // ---------- Status and navigation ----------
+    // ---------- Status and navigation ----------
 
 
 

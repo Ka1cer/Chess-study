@@ -2316,23 +2316,20 @@ square.addEventListener("click", event => {
       notify("Вариант удалён");
     });
 
-    tools.append(addButton, promoteButton, deleteButton);
+    const viewToggle = document.createElement("button");
+    viewToggle.type = "button";
+    viewToggle.className = "move-view-toggle";
+    viewToggle.textContent = analysisViewMode ? "Обычные ходы" : "Дерево ходов";
+    viewToggle.setAttribute("aria-pressed", String(analysisViewMode));
+    viewToggle.addEventListener("click", () => {
+      analysisViewMode = !analysisViewMode;
+      renderMoves();
+    });
+    tools.append(addButton, promoteButton, deleteButton, viewToggle);
     list.innerHTML = "";
     list.classList.add("move-tree-list");
 
     if (analysisViewMode) {
-      const exitButton = document.createElement("button");
-      exitButton.type = "button";
-      exitButton.className = "analysis-view-exit";
-      exitButton.textContent = "← Обычные ходы";
-      exitButton.addEventListener("click", () => {
-        analysisViewMode = false;
-        const analyzeButton = $("analyzeBtn");
-        if (analyzeButton) analyzeButton.textContent = "Анализировать";
-        renderMoves();
-      });
-      tools.appendChild(exitButton);
-
       if (!moveTree.root.children.length) {
         list.innerHTML = '<div class="empty">В партии пока нет ходов.</div>';
         return;
@@ -2750,7 +2747,6 @@ square.addEventListener("click", event => {
     cursor = history.length;
     branchCreationMode = false;
     analysisViewMode = false;
-    const analyzeButton = $("analyzeBtn"); if (analyzeButton) analyzeButton.textContent = "Анализировать";
     currentId = null;
     arrows = [];
 
@@ -3087,12 +3083,7 @@ square.addEventListener("click", event => {
 
   function installEvents() {
     const analyzeButton = $("analyzeBtn");
-    if (analyzeButton) analyzeButton.addEventListener("click", () => {
-      analysisViewMode = !analysisViewMode;
-      analyzeButton.textContent = analysisViewMode ? "Обычные ходы" : "Анализировать";
-      renderMoves();
-      if (analysisViewMode) analyzeGameGraph();
-    });
+    if (analyzeButton) analyzeButton.addEventListener("click", () => analyzeGameGraph());
 
     // Unlock browser audio on the first genuine user interaction so that
     // Stockfish replies can also produce sounds later in the game.
@@ -3100,12 +3091,24 @@ square.addEventListener("click", event => {
     const engineModal = $("engineModal");
     const settingsModal = $("settingsModal");
     const gamesModal = $("gamesModal");
-    $("myGamesOpenBtn").addEventListener("click", () => {
-      gamesModal.hidden = false;
-      renderSavedGames();
+    const gamesButton = $("myGamesOpenBtn");
+    const closeGamesPopover = () => {
+      gamesModal.hidden = true;
+      gamesButton.setAttribute("aria-expanded", "false");
+    };
+    gamesButton.addEventListener("click", () => {
+      const opening = gamesModal.hidden;
+      gamesModal.hidden = !opening;
+      gamesButton.setAttribute("aria-expanded", String(opening));
+      if (opening) { renderSavedGames(); $("searchInput").focus(); }
     });
-    $("gamesModalCloseBtn").addEventListener("click", () => { gamesModal.hidden = true; });
-    gamesModal.addEventListener("click", event => { if (event.target === gamesModal) gamesModal.hidden = true; });
+    $("gamesModalCloseBtn").addEventListener("click", closeGamesPopover);
+    document.addEventListener("pointerdown", event => {
+      if (!gamesModal.hidden && !gamesModal.contains(event.target) && !gamesButton.contains(event.target)) closeGamesPopover();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !gamesModal.hidden) closeGamesPopover();
+    });
     $("settingsModalOpenBtn").addEventListener("click", () => { settingsModal.hidden = false; });
     $("settingsModalCloseBtn").addEventListener("click", () => { settingsModal.hidden = true; });
     settingsModal.addEventListener("click", event => { if (event.target === settingsModal) settingsModal.hidden = true; });

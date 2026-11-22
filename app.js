@@ -497,8 +497,7 @@
         width: 89%;
         height: 89%;
         object-fit: contain;
-        pointer-events: none;
-        user-select: none;
+        pointer-events: none;        user-select: none;
         -webkit-user-drag: none;
       }
 
@@ -995,7 +994,6 @@
     function getCurrentLineResult() {
 
     const temp = new Chess();
-
 
 
     for (const move of history) {
@@ -1497,8 +1495,7 @@ square.addEventListener("click", event => {
   function stopEngineSearch() {
     if (engineMoveTimer !== null) {
       clearTimeout(engineMoveTimer);
-      engineMoveTimer = null;
-    }
+      engineMoveTimer = null;    }
     engineRequest++;
     if (engineWorker && (engineThinking || engineAnalysisOnly)) {
       ignoreNextBestmove = true;
@@ -1999,7 +1996,6 @@ square.addEventListener("click", event => {
     });
 
 
-
     board.addEventListener("mousedown", event => {
 
       if (event.button !== 2) return;
@@ -2497,7 +2493,6 @@ square.addEventListener("click", event => {
     if ($("moveCounter")) {
 
       $("moveCounter").textContent = cursor === 0
-
         ? "Start position"
 
         : `Move ${Math.ceil(cursor / 2)} of ${Math.ceil(history.length / 2)}`;
@@ -2666,7 +2661,11 @@ square.addEventListener("click", event => {
       return output;
     }
 
-    return headerText + "\n\n" + emit(moveTree.root, 1).trim() + " " + gameResult();
+    const moveText = emit(moveTree.root, 1).trim() + " " + gameResult();
+    // Store the game description as a standard PGN brace comment at the end.
+    // Braces inside the description are converted to parentheses to keep PGN valid.
+    const notes = String(m.notes || "").trim().replace(/[{}]/g, char => char === "{" ? "(" : ")");
+    return headerText + "\n\n" + moveText + (notes ? "\n\n{" + notes + "}" : "");
   }
 
     function parsePgnToTree(pgnText) {
@@ -2676,7 +2675,14 @@ square.addEventListener("click", event => {
       headers[key] = value.replace(/\\(["\\])/g, "$1");
       return " ";
     });
-    body = body.replace(/\{[\s\S]*?\}/g, " ").replace(/;[^\r\n]*/g, " ");
+    // PGN brace comments are collected as the game's description before being
+    // removed from the movetext parser.
+    const comments = [];
+    body = body.replace(/\{([\s\S]*?)\}/g, (_, comment) => {
+      const text = comment.trim();
+      if (text) comments.push(text);
+      return " ";
+    }).replace(/;[^\r\n]*/g, " ");
     body = body.replace(/\(/g, " ( ").replace(/\)/g, " ) ");
     const tokens = body.match(/\(|\)|[^\s]+/g) || [];
     const tree = new window.ChessStudyMoveTree();
@@ -2727,7 +2733,7 @@ square.addEventListener("click", event => {
     }
 
     if (stack.length) throw new Error("Не закрыты скобки варианта в PGN");
-    return { tree, headers };
+    return { tree, headers, comments };
   }
 
   function importPgnText(text) {
@@ -2759,7 +2765,7 @@ square.addEventListener("click", event => {
       blackElo: h.BlackElo || "",
       event: h.Event || "Imported game",
       date: validDate ? h.Date.replaceAll(".", "-") : "",
-      notes: ""
+      notes: (parsed.comments || []).join("\n\n")
     });
 
     goTo(history.length);
@@ -2997,8 +3003,7 @@ square.addEventListener("click", event => {
   function resetGame() {
     engineGameEnded = false;
     pendingPromotion = null;
-    if ($("promotionModal")) $("promotionModal").hidden = true;
-    renderEvaluation(0);
+    if ($("promotionModal")) $("promotionModal").hidden = true;    renderEvaluation(0);
     engineAnalysisOnly = false;
 
     if (engineMode) stopEngineSearch();

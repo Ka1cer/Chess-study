@@ -35,6 +35,7 @@
     <div class="section-title"><h2>Инструменты</h2></div>
     <div class="tools-actions">
       <button id="analyzeBtn" class="btn primary full" type="button">Анализировать</button>
+      <button id="detailsModalOpenBtn" class="btn ghost full" type="button">Game Details</button>
       <button id="resignBtn" class="resign-btn full" type="button" hidden>Сдаться</button>
     </div>
     <p class="tools-note">Дополнительные инструменты появятся здесь.</p>
@@ -67,18 +68,21 @@
     <div id="moveList" class="move-list"><div class="empty">Moves will appear here.</div></div>
   </aside>
 
-  <section class="details-panel panel">
-    <div class="section-title"><h2>Game details</h2><span class="subtle">Edit metadata</span></div>
-    <div class="details-grid">
-      <label>White <input id="whiteInput" value="White" maxlength="80"></label>
-      <label>Black <input id="blackInput" value="Black" maxlength="80"></label>
-      <label>Event <input id="eventInput" value="Casual game" maxlength="100"></label>
-      <label>Date <input id="dateInput" type="date"></label>
-      <label class="notes-field">Opening / notes <textarea id="notesInput" rows="2" placeholder="Opening name, ideas, mistakes..."></textarea></label>
-      <div class="save-field"><button id="saveBtn" class="btn primary full">Save to my database</button><div class="small-note">Games are stored in this browser on this device (localStorage).</div></div>
-    </div>
-  </section>
-
+  <div id="detailsModal" class="modal-backdrop" hidden>
+    <section class="details-dialog panel" role="dialog" aria-modal="true" aria-labelledby="detailsDialogTitle">
+      <div class="section-title"><h2 id="detailsDialogTitle">Game Details</h2><button id="detailsModalCloseBtn" class="icon-btn" type="button" aria-label="Close">×</button></div>
+      <section class="details-panel">
+        <div class="details-grid">
+          <label>White <input id="whiteInput" value="White" maxlength="80"></label>
+          <label>Black <input id="blackInput" value="Black" maxlength="80"></label>
+          <label>Event <input id="eventInput" value="Casual game" maxlength="100"></label>
+          <label>Date <input id="dateInput" type="date"></label>
+          <label class="notes-field">Opening / notes <textarea id="notesInput" rows="2" placeholder="Opening name, ideas, mistakes..."></textarea></label>
+          <div class="save-field"><button id="saveBtn" class="btn primary full">Save to my database</button><div class="small-note">Games are stored in this browser on this device (localStorage).</div></div>
+        </div>
+      </section>
+    </section>
+  </div>
 
 </main>
 <div id="engineModal" class="modal-backdrop" hidden>

@@ -2324,14 +2324,71 @@ square.addEventListener("click", event => {
       const exitButton = document.createElement("button");
       exitButton.type = "button";
       exitButton.className = "analysis-view-exit";
-      exitButton.textContent = "← Обычный список ходов";
+      exitButton.textContent = "← Обычные ходы";
       exitButton.addEventListener("click", () => {
         analysisViewMode = false;
+        const analyzeButton = $("analyzeBtn");
+        if (analyzeButton) analyzeButton.textContent = "Анализировать";
         renderMoves();
       });
       tools.appendChild(exitButton);
 
       if (!moveTree.root.children.length) {
+        list.innerHTML = '<div class="empty">В партии пока нет ходов.</div>';
+        return;
+      }
+
+      const treeRoot = document.createElement("div");
+      treeRoot.className = "analysis-tree";
+
+      function appendTreeMove(container, node, ply) {
+        const token = document.createElement("button");
+        token.type = "button";
+        token.className = "analysis-tree-move";
+        token.classList.toggle("active", currentNode === node);
+        token.dataset.nodeId = node.id;
+        const moveNo = Math.floor((ply - 1) / 2) + 1;
+        const prefix = node.move.color === "w" ? moveNo + "." : (ply === 1 ? moveNo + "..." : "");
+        token.textContent = (prefix ? prefix + " " : "") + node.move.san;
+        token.setAttribute("aria-label", "Ход " + node.move.san);
+        token.addEventListener("click", () => goToMoveNode(node));
+        container.appendChild(token);
+      }
+
+      function renderTreeLine(parent, ply, line) {
+        if (!parent.children.length) return;
+        const main = parent.children[0];
+        appendTreeMove(line, main, ply);
+
+        // Side branches are shown as separate indented lines attached to
+        // the position before the main continuation.
+        for (let i = 1; i < parent.children.length; i++) {
+          const variation = parent.children[i];
+          const branch = document.createElement("div");
+          branch.className = "analysis-tree-variation";
+          const label = document.createElement("span");
+          label.className = "analysis-tree-branch-label";
+          label.textContent = "Вариант";
+          branch.appendChild(label);
+          appendTreeMove(branch, variation, ply);
+          renderTreeLine(variation, ply + 1, branch);
+          line.appendChild(branch);
+        }
+
+        renderTreeLine(main, ply + 1, line);
+      }
+
+      const mainLine = document.createElement("div");
+      mainLine.className = "analysis-tree-line";
+      renderTreeLine(moveTree.root, 1, mainLine);
+      treeRoot.appendChild(mainLine);
+      list.appendChild(treeRoot);
+      const active = list.querySelector(".analysis-tree-move.active");
+      if (active) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+      return;
+    }
+
+    if (!moveTree.root.children.length) {
         list.innerHTML = '<div class="empty">В партии пока нет ходов.</div>';
         return;
       }
@@ -3083,6 +3140,13 @@ square.addEventListener("click", event => {
     document.addEventListener("pointerdown", unlockChessAudio);
     const engineModal = $("engineModal");
     const settingsModal = $("settingsModal");
+    const gamesModal = $("gamesModal");
+    $("myGamesOpenBtn").addEventListener("click", () => {
+      gamesModal.hidden = false;
+      renderSavedGames();
+    });
+    $("gamesModalCloseBtn").addEventListener("click", () => { gamesModal.hidden = true; });
+    gamesModal.addEventListener("click", event => { if (event.target === gamesModal) gamesModal.hidden = true; });
     $("settingsModalOpenBtn").addEventListener("click", () => { settingsModal.hidden = false; });
     $("settingsModalCloseBtn").addEventListener("click", () => { settingsModal.hidden = true; });
     settingsModal.addEventListener("click", event => { if (event.target === settingsModal) settingsModal.hidden = true; });
@@ -3135,6 +3199,7 @@ square.addEventListener("click", event => {
       if (event.key === "Escape") {
         settingsModal.hidden = true;
         engineModal.hidden = true;
+        if (gamesModal) gamesModal.hidden = true;
       }
     });
     $("engineModalOpenBtn").addEventListener("click", () => { engineModal.hidden = false; });

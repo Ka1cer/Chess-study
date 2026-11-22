@@ -493,3 +493,51 @@ body.light-theme .board-panel .player-row {
   background: rgba(255,255,255,.48);
   border-color: rgba(50,60,75,.14);
 }
+
+
+/* v3.2.3 — preserve board scale, isolate glass widgets, position flip control */
+@media (min-width: 901px) {
+  /* Keep the original board footprint; only remove the surrounding card. */
+  .board-panel .board-column {
+    width: min(100%, min(72.7056vh, 716px)) !important;
+    flex: 0 1 auto;
+  }
+  .board-panel .board-workspace {
+    justify-content: center !important;
+    gap: 12px;
+    transform: none !important;
+  }
+
+  /* The flip button sits just to the right of the board, not at the far edge. */
+  .board-panel #flipBtn {
+    transform: translateX(-82px) !important;
+    margin-right: 0;
+  }
+
+  /* Use the available right-side room for the Move Widget without changing text sizing. */
+  .layout {
+    grid-template-columns: minmax(150px,180px) minmax(0,1fr) minmax(420px,470px);
+  }
+}
+@media (max-width: 1150px) and (min-width: 901px) {
+  .board-panel .board-column {
+    width: min(100%, min(64vh, 620px)) !important;
+  }
+}
+
+/* Analysis Board is a transparent stage in every theme/glass setting.
+   Liquid Glass remains enabled for Tools, Moves and player name chips. */
+body.liquid-glass .board-panel,
+body.liquid-glass .board-panel.panel,
+body.light-theme.liquid-glass .board-panel,
+body.light-theme.liquid-glass .board-panel.panel {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+body.liquid-glass .board-panel::before,
+body.light-theme.liquid-glass .board-panel::before {
+  display: none !important;
+}
